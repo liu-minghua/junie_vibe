@@ -1,4 +1,4 @@
-package edu.minghualiu.springmvc;
+package edu.minghualiu.oahspe;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
