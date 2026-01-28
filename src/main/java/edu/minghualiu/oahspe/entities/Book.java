@@ -27,7 +27,6 @@ public class Book {
     private List<Chapter> chapters = new ArrayList<>();
 
     @CreationTimestamp
-    @Column(updatable = false)
     private LocalDateTime createdDate;
 
     @UpdateTimestamp

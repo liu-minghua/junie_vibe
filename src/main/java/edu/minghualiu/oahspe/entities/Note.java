@@ -10,32 +10,33 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "chapters")
+@Table(name = "notes", uniqueConstraints = {@UniqueConstraint(columnNames = {"noteKey"})})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Chapter {
+public class Note {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private int id;
 
-    private String title;
-    private String description;
-    private String titleInChinese;
-    private String descriptionInChines;
+    private String noteKey;
+    private String text;
+    private String textInChinese;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "book_id")
-    private Book book;
+    @JoinColumn(name = "verse_id", nullable = true)
+    private Verse verse;
 
     @Builder.Default
-    @OneToMany(fetch = FetchType.LAZY)
-    private List<Verse> verses = new ArrayList<>();
+    @ManyToMany
+    @JoinTable( name = "note_images", joinColumns = @JoinColumn(name = "note_id"), inverseJoinColumns = @JoinColumn(name = "image_id") )
+    private List<Image> images = new ArrayList<>();
 
     @CreationTimestamp
     private LocalDateTime createdAt;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
 }

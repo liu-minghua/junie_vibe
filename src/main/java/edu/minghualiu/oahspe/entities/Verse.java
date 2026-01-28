@@ -10,29 +10,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "chapters")
+@Table(name = "verses",  uniqueConstraints = {@UniqueConstraint(columnNames = {"verseKey"})})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Chapter {
+public class Verse {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private int id;
 
-    private String title;
-    private String description;
-    private String titleInChinese;
-    private String descriptionInChines;
+    private String verseKey;
+    private String text;
+    private String textInChinese;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "book_id")
-    private Book book;
+    @JoinColumn(name = "chapter_id", nullable = false)
+    private Chapter chapter;
 
     @Builder.Default
-    @OneToMany(fetch = FetchType.LAZY)
-    private List<Verse> verses = new ArrayList<>();
+    @OneToMany(mappedBy = "verse", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Note> notes = new ArrayList<>();
 
     @CreationTimestamp
     private LocalDateTime createdAt;

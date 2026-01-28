@@ -6,36 +6,39 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
-@Table(name = "chapters")
+@Table(name = "images",
+uniqueConstraints = {
+@UniqueConstraint(columnNames = {"imageKey"})
+    })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Chapter {
+public class Image {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private int id;
 
+    @Column(nullable = false, unique = true, length = 10)
+    private String imageKey;
+
+    @Column(nullable = false)
     private String title;
-    private String description;
     private String titleInChinese;
+    @Column(nullable = false)
+    private String description;
     private String descriptionInChines;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "book_id")
-    private Book book;
-
-    @Builder.Default
-    @OneToMany(fetch = FetchType.LAZY)
-    private List<Verse> verses = new ArrayList<>();
+    private String contentType;
+    @Lob @Column(columnDefinition = "BLOB")
+    private byte[] data;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
 }
