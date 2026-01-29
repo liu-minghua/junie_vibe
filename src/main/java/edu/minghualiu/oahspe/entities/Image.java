@@ -31,10 +31,15 @@ public class Image {
     @Column(nullable = false)
     private String description;
     private String descriptionInChines;
-
+    private Integer sourcePage;
+pr  private String originalFilename;
+  	
     private String contentType;
     @Lob @Column(columnDefinition = "BLOB")
     private byte[] data;
+
+    @OneToMany(mappedBy = "note_images")
+    private List<Note> notes;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
