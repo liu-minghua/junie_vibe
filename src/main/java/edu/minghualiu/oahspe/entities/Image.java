@@ -6,6 +6,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "images",
@@ -31,10 +33,16 @@ public class Image {
     @Column(nullable = false)
     private String description;
     private String descriptionInChines;
-
+    private Integer sourcePage;
+    private String originalFilename;
+  	
     private String contentType;
     @Lob @Column(columnDefinition = "BLOB")
     private byte[] data;
+
+    @Builder.Default
+    @ManyToMany(mappedBy = "images")
+    private List<Note> notes = new ArrayList<>();
 
     @CreationTimestamp
     private LocalDateTime createdAt;

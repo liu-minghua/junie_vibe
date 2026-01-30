@@ -24,15 +24,16 @@ public class Chapter {
     private String title;
     private String description;
     private String titleInChinese;
-    private String descriptionInChines;
+    private String descriptionInChinese;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "book_id")
     private Book book;
 
+    @OneToMany(mappedBy = "chapter", cascade = CascadeType.PERSIST, orphanRemoval = false)
     @Builder.Default
-    @OneToMany(fetch = FetchType.LAZY)
     private List<Verse> verses = new ArrayList<>();
+
 
     @CreationTimestamp
     private LocalDateTime createdAt;
