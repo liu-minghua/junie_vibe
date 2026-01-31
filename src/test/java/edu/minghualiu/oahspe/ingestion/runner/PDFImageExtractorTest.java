@@ -45,31 +45,43 @@ class PDFImageExtractorTest {
     // ========== generateImageKey Tests ==========
 
     @Test
-    @DisplayName("generateImageKey should return correct format IMG{page}_{name}")
-    void generateImageKey_CorrectFormat() {
-        String key = imageExtractor.generateImageKey(42, "Im0");
-        assertEquals("IMG42_Im0", key);
+    @DisplayName("generateImageKey should return sequential i001 format")
+    void generateImageKey_SequentialFormat() {
+        imageExtractor.resetImageCounter();
+        
+        String key1 = imageExtractor.generateImageKey();
+        String key2 = imageExtractor.generateImageKey();
+        String key3 = imageExtractor.generateImageKey();
+        
+        assertEquals("i001", key1);
+        assertEquals("i002", key2);
+        assertEquals("i003", key3);
     }
 
     @Test
-    @DisplayName("generateImageKey should handle single digit page numbers")
-    void generateImageKey_SingleDigitPage() {
-        String key = imageExtractor.generateImageKey(1, "Image1");
-        assertEquals("IMG1_Image1", key);
+    @DisplayName("generateImageKey should reset counter correctly")
+    void generateImageKey_ResetCounter() {
+        imageExtractor.generateImageKey(); // i001
+        imageExtractor.generateImageKey(); // i002
+        
+        imageExtractor.resetImageCounter();
+        
+        String key = imageExtractor.generateImageKey();
+        assertEquals("i001", key);
     }
 
     @Test
-    @DisplayName("generateImageKey should handle large page numbers")
-    void generateImageKey_LargePageNumber() {
-        String key = imageExtractor.generateImageKey(999, "Img");
-        assertEquals("IMG999_Img", key);
-    }
-
-    @Test
-    @DisplayName("generateImageKey should handle complex object names")
-    void generateImageKey_ComplexObjectName() {
-        String key = imageExtractor.generateImageKey(100, "X_Image_001");
-        assertEquals("IMG100_X_Image_001", key);
+    @DisplayName("generateImageKey should handle large numbers with proper padding")
+    void generateImageKey_LargeNumbers() {
+        imageExtractor.resetImageCounter();
+        
+        // Advance counter to 99
+        for (int i = 0; i < 99; i++) {
+            imageExtractor.generateImageKey();
+        }
+        
+        String key100 = imageExtractor.generateImageKey();
+        assertEquals("i100", key100);
     }
 
     // ========== extractImagesFromPage Error Handling Tests ==========
@@ -81,7 +93,7 @@ class PDFImageExtractorTest {
 
         PDFExtractionException exception = assertThrows(
                 PDFExtractionException.class,
-                () -> imageExtractor.extractImagesFromPage(nonExistentPath, 1)
+                () -> imageExtractor.extractImagesFromPage(nonExistentPath, 1, null)
         );
 
         assertTrue(exception.getMessage().contains("File not found"));
@@ -96,7 +108,7 @@ class PDFImageExtractorTest {
 
         PDFExtractionException exception = assertThrows(
                 PDFExtractionException.class,
-                () -> imageExtractor.extractImagesFromPage(pdfPath.toString(), 0)
+                () -> imageExtractor.extractImagesFromPage(pdfPath.toString(), 0, null)
         );
 
         assertTrue(exception.getMessage().contains("out of range"));
@@ -109,7 +121,7 @@ class PDFImageExtractorTest {
 
         PDFExtractionException exception = assertThrows(
                 PDFExtractionException.class,
-                () -> imageExtractor.extractImagesFromPage(pdfPath.toString(), 100)
+                () -> imageExtractor.extractImagesFromPage(pdfPath.toString(), 100, null)
         );
 
         assertTrue(exception.getMessage().contains("out of range"));
@@ -120,7 +132,7 @@ class PDFImageExtractorTest {
     void extractImagesFromPage_NoImages_ReturnsEmptyList() throws Exception {
         Path pdfPath = createMinimalTestPdf();
 
-        List<Image> images = imageExtractor.extractImagesFromPage(pdfPath.toString(), 1);
+        List<Image> images = imageExtractor.extractImagesFromPage(pdfPath.toString(), 1, null);
 
         assertNotNull(images);
         assertTrue(images.isEmpty());

@@ -27,11 +27,16 @@ import java.util.List;
  * This component handles:
  * - Extracting embedded images from PDF pages using PDFBox
  * - Converting images to byte arrays with proper format detection
- * - Generating unique, deterministic image keys for restart-safe ingestion
+ * - Generating sequential image keys (i001, i002, i003, etc.)
  * - Idempotent persistence (no duplicates on re-run)
+ * - Skipping front matter and back matter pages
  *
- * Image Key Format: "IMG{page}_{objectName}"
- * Example: "IMG42_Im1" for first image object on page 42
+ * Image Key Format: "i{nnn}" where nnn is zero-padded sequential number
+ * Example: "i001", "i042", "i123"
+ *
+ * Configuration:
+ * - START_PAGE: First page to extract images from (default: 7)
+ * - END_PAGE: Last page to extract images from (default: 1668)
  *
  * @see PDFTextExtractor
  * @see Image
@@ -43,6 +48,28 @@ import java.util.List;
 public class PDFImageExtractor {
 
     private final ImageRepository imageRepository;
+    
+    // Extract images only from main content pages
+    private static final int DEFAULT_START_PAGE = 7;    // First page of main content
+    private static final int DEFAULT_END_PAGE = 1668;   // Last page of main content
+    
+    // Global counter for sequential image numbering
+    private int imageCounter = 0;
+    
+    /**
+     * Initializes the image counter by querying the database for the highest
+     * existing image key number. This ensures idempotent behavior on restart.
+     * 
+     * If images already exist (e.g., from a previous partial run), the counter
+     * resumes from the highest number. Otherwise, starts from 0.
+     * 
+     * Should be called before starting image extraction.
+     */
+    public void initializeImageCounter() {
+        Integer maxNumber = imageRepository.findMaxImageKeyNumber();
+        imageCounter = (maxNumber != null) ? maxNumber : 0;
+        log.info("Initialized image counter at {} (resuming from existing images)", imageCounter);
+    }
 
     /**
      * Extracts all images from a specific page of a PDF file.
@@ -51,12 +78,35 @@ public class PDFImageExtractor {
      * Uses idempotent save strategy: if an image with the same key exists,
      * it returns the existing image instead of creating a duplicate.
      *
+     * Skips pages outside the configured range (front matter and back matter).
+     *
      * @param pdfFilePath the path to the PDF file
      * @param pageNumber the page number to extract images from (1-indexed)
+     * @param context the ingestion context to update with duplicate metrics (optional)
      * @return list of extracted and persisted Image entities
      * @throws PDFExtractionException if file not found, invalid PDF, or extraction fails
      */
-    public List<Image> extractImagesFromPage(String pdfFilePath, int pageNumber)
+    public List<Image> extractImagesFromPage(String pdfFilePath, int pageNumber,
+                                             IngestionContext context)
+            throws PDFExtractionException {
+        return extractImagesFromPage(pdfFilePath, pageNumber, context, 
+                                   DEFAULT_START_PAGE, DEFAULT_END_PAGE);
+    }
+    
+    /**
+     * Extracts all images from a specific page with configurable page range.
+     *
+     * @param pdfFilePath the path to the PDF file
+     * @param pageNumber the page number to extract images from (1-indexed)
+     * @param context the ingestion context (optional)
+     * @param startPage first page to extract images from
+     * @param endPage last page to extract images from
+     * @return list of extracted and persisted Image entities
+     * @throws PDFExtractionException if file not found, invalid PDF, or extraction fails
+     */
+    public List<Image> extractImagesFromPage(String pdfFilePath, int pageNumber,
+                                             IngestionContext context,
+                                             int startPage, int endPage)
             throws PDFExtractionException {
 
         File file = new File(pdfFilePath);
@@ -70,13 +120,22 @@ public class PDFImageExtractor {
         List<Image> extractedImages = new ArrayList<>();
 
         try (PDDocument document = PDDocument.load(file)) {
-            if (pageNumber < 1 || pageNumber > document.getNumberOfPages()) {
+            int totalPages = document.getNumberOfPages();
+            
+            if (pageNumber < 1 || pageNumber > totalPages) {
                 throw new PDFExtractionException(
                         pdfFilePath,
                         pageNumber,
                         String.format("Page number out of range. Document has %d pages.",
-                                document.getNumberOfPages())
+                                totalPages)
                 );
+            }
+            
+            // Skip pages outside the configured range
+            if (pageNumber < startPage || pageNumber > endPage) {
+                log.debug("Skipping page {} (outside range {}-{})", 
+                         pageNumber, startPage, endPage);
+                return extractedImages;
             }
 
             PDPage page = document.getPage(pageNumber - 1); // PDFBox uses 0-indexed
@@ -93,7 +152,8 @@ public class PDFImageExtractor {
                     PDXObject xobject = resources.getXObject(name);
 
                     if (xobject instanceof PDImageXObject imageXObject) {
-                        Image image = extractAndSaveImage(imageXObject, name.getName(), pageNumber);
+                        Image image = extractAndSaveImage(imageXObject, name.getName(), 
+                                                         pageNumber, context);
                         if (image != null) {
                             extractedImages.add(image);
                         }
@@ -139,48 +199,56 @@ public class PDFImageExtractor {
      * @param imageXObject the PDFBox image object
      * @param objectName the PDF object name (e.g., "Im0", "Image1")
      * @param pageNumber the page number (for key generation and tracking)
+     * @param context the ingestion context to update with duplicate metrics (optional)
      * @return the persisted Image entity, or null if extraction failed
      */
     private Image extractAndSaveImage(PDImageXObject imageXObject, String objectName,
-                                      int pageNumber) {
+                                      int pageNumber, IngestionContext context) {
         try {
-            // Generate unique, deterministic key
-            String imageKey = generateImageKey(pageNumber, objectName);
+            // Generate sequential key
+            String imageKey = generateImageKey();
 
             // Check if image already exists (restart safety / idempotent)
-            return imageRepository.findByImageKey(imageKey)
-                    .orElseGet(() -> {
-                        try {
-                            // Extract image data
-                            byte[] imageData = extractImageBytes(imageXObject);
-                            String format = imageXObject.getSuffix();
-                            if (format == null || format.isEmpty()) {
-                                format = "png"; // Default format
-                            }
-                            String contentType = "image/" + format.toLowerCase();
+            var existingImage = imageRepository.findByImageKey(imageKey);
+            if (existingImage.isPresent()) {
+                if (context != null) {
+                    context.incrementDuplicateImagesSkipped();
+                }
+                log.debug("Skipping duplicate image: {} (already exists)", imageKey);
+                return existingImage.get();
+            }
 
-                            // Create new image entity
-                            Image image = Image.builder()
-                                    .imageKey(imageKey)
-                                    .title("Image " + imageKey)
-                                    .description("Extracted from page " + pageNumber)
-                                    .sourcePage(pageNumber)
-                                    .originalFilename(objectName + "." + format)
-                                    .contentType(contentType)
-                                    .data(imageData)
-                                    .build();
+            // Extract and save new image
+            try {
+                // Extract image data
+                byte[] imageData = extractImageBytes(imageXObject);
+                String format = imageXObject.getSuffix();
+                if (format == null || format.isEmpty()) {
+                    format = "png"; // Default format
+                }
+                String contentType = "image/" + format.toLowerCase();
 
-                            Image saved = imageRepository.save(image);
-                            log.debug("Saved new image: {} (page {}, {} bytes, {})",
-                                    imageKey, pageNumber, imageData.length, contentType);
-                            return saved;
+                // Create new image entity
+                Image image = Image.builder()
+                        .imageKey(imageKey)
+                        .title("Image " + imageKey)
+                        .description("Extracted from page " + pageNumber)
+                        .sourcePage(pageNumber)
+                        .originalFilename(objectName + "." + format)
+                        .contentType(contentType)
+                        .data(imageData)
+                        .build();
 
-                        } catch (IOException e) {
-                            log.error("Failed to extract image data for {}: {}",
-                                    imageKey, e.getMessage());
-                            return null;
-                        }
-                    });
+                Image saved = imageRepository.save(image);
+                log.debug("Saved new image: {} (page {}, {} bytes, {})",
+                        imageKey, pageNumber, imageData.length, contentType);
+                return saved;
+
+            } catch (IOException e) {
+                log.error("Failed to extract image data for {}: {}",
+                        imageKey, e.getMessage());
+                return null;
+            }
 
         } catch (Exception e) {
             log.error("Error processing image {} on page {}: {}",
@@ -210,20 +278,29 @@ public class PDFImageExtractor {
     }
 
     /**
-     * Generates a unique, deterministic image key based on page number and object name.
-     * Format: "IMG{page}_{objectName}"
+     * Generates a sequential image key in format i001, i002, i003, etc.
      *
-     * This ensures:
-     * - No key collisions between images
-     * - Restart-safe ingestion (same PDF produces same keys)
-     * - Traceability to source page
+     * Key format: "i{nnn}" where nnn is zero-padded 3-digit number
+     * Example: "i001", "i042", "i123"
      *
-     * @param pageNumber the page number (1-indexed)
-     * @param objectName the PDF object name
-     * @return unique image key (e.g., "IMG42_Im0")
+     * This format provides:
+     * - Simple, predictable naming for references in text
+     * - Sequential ordering matching extraction order
+     * - Consistent 4-character key length
+     *
+     * @return unique image key (e.g., "i001")
      */
-    public String generateImageKey(int pageNumber, String objectName) {
-        return "IMG" + pageNumber + "_" + objectName;
+    public String generateImageKey() {
+        imageCounter++;
+        return String.format("i%03d", imageCounter);
+    }
+    
+    /**
+     * Resets the image counter. Used when starting fresh ingestion.
+     */
+    public void resetImageCounter() {
+        imageCounter = 0;
+        log.debug("Image counter reset to 0");
     }
 
     /**
@@ -251,7 +328,7 @@ public class PDFImageExtractor {
 
             for (int pageNum = 1; pageNum <= pageCount; pageNum++) {
                 try {
-                    List<Image> pageImages = extractImagesFromPage(pdfFilePath, pageNum);
+                    List<Image> pageImages = extractImagesFromPage(pdfFilePath, pageNum, null);
                     allImages.addAll(pageImages);
                 } catch (PDFExtractionException e) {
                     log.warn("Failed to extract images from page {}: {}",

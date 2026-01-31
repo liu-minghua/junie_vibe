@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
 import java.util.Optional;
@@ -76,9 +77,9 @@ public class OahspeIngestionRunner {
      * - Database errors: Log error, add to context, continue to next page
      *
      * Transaction semantics:
-     * Each page's events are ingested atomically. If a page fails,
-     * partial entities are rolled back. The runner continues processing
-     * remaining pages.
+     * Each page's events are ingested in its own transaction (REQUIRES_NEW).
+     * If a page fails, only that page's entities are rolled back.
+     * The runner continues processing remaining pages.
      *
      * @param pdfFilePath path to the PDF file to ingest
      * @return IngestionContext with completion status and metrics
@@ -86,7 +87,6 @@ public class OahspeIngestionRunner {
      * @see IngestionContext#isSuccessful()
      * @see IngestionContext#getPageErrors()
      */
-    @Transactional
     public IngestionContext ingestPdf(String pdfFilePath) throws PDFExtractionException {
         return ingestPdfWithProgress(pdfFilePath, null);
     }
@@ -119,6 +119,9 @@ public class OahspeIngestionRunner {
         );
 
         log.info("Starting PDF ingestion: {} ({} pages)", pdfFilePath, context.getTotalPages());
+        
+        // Initialize image counter from database for idempotent restart
+        imageExtractor.initializeImageCounter();
 
         for (int pageNum = 1; pageNum <= context.getTotalPages(); pageNum++) {
             context.setCurrentPageNumber(pageNum);
@@ -194,6 +197,9 @@ public class OahspeIngestionRunner {
      * 4. Ingest events using OahspeIngestionService.ingestEvents()
      * 5. Update context with event and image counts
      *
+     * Note: The ingestEvents() method is transactional, so each page's database
+     * operations run in their own transaction automatically.
+     *
      * @param pageNumber the page number to process (1-indexed)
      * @param context the IngestionContext to update with progress
      * @throws Exception if extraction, parsing, or ingestion fails
@@ -206,7 +212,7 @@ public class OahspeIngestionRunner {
         // Stage 2: Extract images
         try {
             List<Image> images = imageExtractor.extractImagesFromPage(
-                    context.getPdfFilePath(), pageNumber);
+                    context.getPdfFilePath(), pageNumber, context);
             context.addExtractedImages(images.size());
             if (!images.isEmpty()) {
                 log.debug("Page {} extracted {} images", pageNumber, images.size());

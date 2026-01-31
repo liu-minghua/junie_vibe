@@ -39,6 +39,12 @@ public class IngestionContext {
     /** Total number of images extracted across all pages */
     private int totalImagesExtracted;
 
+    /** Number of orphaned verses that appeared before first book/chapter */
+    private int orphanedVersesCount;
+
+    /** Number of duplicate images skipped during extraction */
+    private int duplicateImagesSkipped;
+
     /** List of error messages per page (format: "Page N: error description") */
     private List<String> pageErrors;
 
@@ -52,6 +58,8 @@ public class IngestionContext {
         this.totalEventsProcessed = 0;
         this.totalErrorsEncountered = 0;
         this.totalImagesExtracted = 0;
+        this.orphanedVersesCount = 0;
+        this.duplicateImagesSkipped = 0;
     }
 
     /**
@@ -84,6 +92,20 @@ public class IngestionContext {
      */
     public void addExtractedImages(int count) {
         this.totalImagesExtracted += count;
+    }
+
+    /**
+     * Increments the count of orphaned verses (verses before first book/chapter).
+     */
+    public void incrementOrphanedVersesCount() {
+        this.orphanedVersesCount++;
+    }
+
+    /**
+     * Increments the count of duplicate images skipped.
+     */
+    public void incrementDuplicateImagesSkipped() {
+        this.duplicateImagesSkipped++;
     }
 
     /**
@@ -121,6 +143,8 @@ public class IngestionContext {
                         "  currentPage: %d%n" +
                         "  totalEvents: %d%n" +
                         "  totalImages: %d%n" +
+                        "  duplicateImagesSkipped: %d%n" +
+                        "  orphanedVerses: %d%n" +
                         "  totalErrors: %d%n" +
                         "  success: %s%n" +
                         "  elapsedTime: %d ms (%d sec)%n" +
@@ -131,6 +155,8 @@ public class IngestionContext {
                 currentPageNumber,
                 totalEventsProcessed,
                 totalImagesExtracted,
+                duplicateImagesSkipped,
+                orphanedVersesCount,
                 totalErrorsEncountered,
                 isSuccessful(),
                 elapsedMs,
