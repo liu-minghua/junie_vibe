@@ -127,7 +127,7 @@ class PageCategoryTest {
     
     @Test
     void testPageRanges_glossaries() {
-        assertThat(PageCategory.GLOSSARIES.getStartPage()).isEqualTo(1669);
+        assertThat(PageCategory.GLOSSARIES.getStartPage()).isEqualTo(1668);  // Overlaps with OAHSPE_BOOKS
         assertThat(PageCategory.GLOSSARIES.getEndPage()).isEqualTo(1690);
     }
     

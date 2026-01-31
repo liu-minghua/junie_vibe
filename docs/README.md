@@ -33,8 +33,9 @@ Foundation layers that convert raw PDF text into structured database.
 - ✅ Phase 1: Core Parser Implementation (OahspeParser state machine)
 - ✅ Phase 2: Ingestion Service Layer (Entity graph building)
 - ✅ Phase 3: Orchestration Layer (PDF extraction & processing)
-- ✅ Phase 4: Testing Infrastructure (Test data builders, validation)
-- ✅ Phase 5: Lombok Integration & REST API (DTOs, Controllers)
+- ✅ Phase 4: Testing Infrastructure (Test data builders, validation framework)
+- ✅ Phase 5: Lombok Integration (DTOs, entity refactoring)
+  - ⚠️ REST API removed in Phase 7 (not needed - validation is built into workflow)
 - ✅ Phase 6: Manual Testing & Validation (Full pipeline verification)
 - **Status:** Production-ready, 100% test coverage
 

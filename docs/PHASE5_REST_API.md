@@ -1,7 +1,19 @@
 # Phase 5: REST API Documentation
 
+**⚠️ DEPRECATED - This validation API has been removed as of Phase 7.**
+
+**Reason:** The async validation REST API was not needed for the actual workflow. Phase 7's WorkflowOrchestrator includes built-in verification gates that handle validation internally without exposing a REST API. Users do not need to interact with validation.
+
+**Replaced by:** Phase 7 verification gates (automatic, CLI-driven, no REST API needed)
+
+**Files Removed:** 29 files (~3,288 LOC) including ValidationController, services, repositories, entities, DTOs, validators
+
+---
+
+## Historical Documentation (for reference only)
+
 ## Overview
-Phase 5 implements a comprehensive REST API for asynchronous text validation requests. The API follows REST conventions with proper HTTP status codes and async processing patterns.
+Phase 5 implemented a comprehensive REST API for asynchronous text validation requests. The API followed REST conventions with proper HTTP status codes and async processing patterns.
 
 ## Base URL
 ```

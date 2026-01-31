@@ -381,7 +381,31 @@ CREATE TABLE index_entries (
 
 ---
 
-### 2. Parser Unit Tests Removed
+### 2. Removed Unused Validation API (Code Cleanup)
+
+**What was removed:** 29 files (~3,288 LOC) from Phase 5 REST API
+
+**Components deleted:**
+- 1 REST controller (ValidationController)
+- 4 services (ValidationRequestService, AsyncValidationService, 2 exceptions)
+- 2 repositories (ValidationRequest, ValidationResult)
+- 5 entities (ValidationRequest, ValidationResult, ValidationIssue, etc.)
+- 6 DTOs (ValidationRequest, ValidationResponse, ValidationResult, etc.)
+- 7 validator classes (OahspeDataValidator, EntityValidator, etc.)
+- 3 test files
+
+**Why removed:** Users don't interact with validation - it's handled internally by Phase 7's verification gates. The async REST API was unnecessary complexity.
+
+**What Phase 7 uses instead:**
+- WorkflowState (execution tracking)
+- ContentLinkingReport (statistics)
+- 3 built-in verification gates (automatic, no REST API)
+
+**Impact:** Simplified codebase, removed confusion between unused validation API and actual workflow verification
+
+---
+
+### 3. Parser Unit Tests Removed
 
 **Issue:** GlossaryParserTest and IndexParserTest were incompatible with service architecture
 
@@ -393,7 +417,7 @@ CREATE TABLE index_entries (
 
 ---
 
-### 3. No Parallel Processing
+### 4. No Parallel Processing
 
 **Issue:** Page loading is single-threaded
 
@@ -426,6 +450,18 @@ CREATE TABLE index_entries (
 **Workaround:** Check logs, fix errors, re-run commands
 
 **Future Enhancement:** Automatic retry with exponential backoff
+
+---
+
+### 5. Page 1668 Content Overlap
+
+**Issue:** Page 1668 contains both book content (above horizontal line) and glossary content (below line)
+
+**Resolution:** Added special handling in PageIngestionLinker to run BOTH parsers for page 1668
+
+**Impact:** Ensures complete data extraction without missing glossary terms
+
+**Code:** `if (pageNumber == 1668)` triggers dual-parser logic (OahspeParser + GlossaryParser)
 
 ---
 
