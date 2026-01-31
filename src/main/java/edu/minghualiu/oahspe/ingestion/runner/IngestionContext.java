@@ -36,6 +36,9 @@ public class IngestionContext {
     /** Total number of errors encountered during ingestion */
     private int totalErrorsEncountered;
 
+    /** Total number of images extracted across all pages */
+    private int totalImagesExtracted;
+
     /** List of error messages per page (format: "Page N: error description") */
     private List<String> pageErrors;
 
@@ -48,6 +51,7 @@ public class IngestionContext {
         this.startTime = System.currentTimeMillis();
         this.totalEventsProcessed = 0;
         this.totalErrorsEncountered = 0;
+        this.totalImagesExtracted = 0;
     }
 
     /**
@@ -71,6 +75,15 @@ public class IngestionContext {
     public void addPageError(int pageNumber, String errorMessage) {
         pageErrors.add(String.format("Page %d: %s", pageNumber, errorMessage));
         totalErrorsEncountered++;
+    }
+
+    /**
+     * Adds to the count of extracted images.
+     *
+     * @param count the number of images extracted from current page
+     */
+    public void addExtractedImages(int count) {
+        this.totalImagesExtracted += count;
     }
 
     /**
@@ -107,6 +120,7 @@ public class IngestionContext {
                         "  totalPages: %d%n" +
                         "  currentPage: %d%n" +
                         "  totalEvents: %d%n" +
+                        "  totalImages: %d%n" +
                         "  totalErrors: %d%n" +
                         "  success: %s%n" +
                         "  elapsedTime: %d ms (%d sec)%n" +
@@ -116,6 +130,7 @@ public class IngestionContext {
                 totalPages,
                 currentPageNumber,
                 totalEventsProcessed,
+                totalImagesExtracted,
                 totalErrorsEncountered,
                 isSuccessful(),
                 elapsedMs,
