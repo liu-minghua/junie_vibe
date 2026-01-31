@@ -8,7 +8,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Stores glossary terms extracted from the Glossaries section (pages 1669-1690).
+ * Stores glossary terms extracted from the Glossaries section (pages 1668-1690).
+ * Note: Page 1668 contains both book content (above horizontal line) and glossary content (below).
  * Critical for maintaining translation consistency across the entire Oahspe.
  */
 @Entity

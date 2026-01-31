@@ -157,7 +157,7 @@ AI-powered translation with model comparison and quality assurance.
 | TABLE_OF_CONTENTS | 4 | No | Book/chapter listing |
 | IMAGE_LIST | 5-6 | No | List of images |
 | OAHSPE_BOOKS | 7-1668 | Yes | Books, chapters, verses, notes (structured content) |
-| GLOSSARIES | 1668-1690 | Yes | ~500 glossary terms (starts bottom half of page 1668) |
+| GLOSSARIES | 1668-1690 | Yes | ~500 glossary terms (page 1668: below horizontal line) |
 | INDEX | 1691-1831 | Yes | ~5000 index entries |
 
 ### Phase 8: Translation Workflow (Coming Soon)

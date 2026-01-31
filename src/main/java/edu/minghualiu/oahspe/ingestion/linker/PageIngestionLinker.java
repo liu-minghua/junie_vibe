@@ -93,6 +93,8 @@ public class PageIngestionLinker {
     /**
      * Ingests a single PageContent entity.
      * Routes to appropriate parser based on category.
+     * Special handling for page 1668: runs BOTH OahspeParser (top half) 
+     * and GlossaryParser (bottom half) since content overlaps.
      * 
      * @param pageContent the page to ingest
      * @param context the ingestion context
@@ -106,23 +108,31 @@ public class PageIngestionLinker {
         PageCategory category = pageContent.getCategory();
         String rawText = pageContent.getRawText();
         
-        switch (category) {
-            case GLOSSARIES:
-                ingestGlossaryPage(rawText, pageNumber, context);
-                break;
-                
-            case INDEX:
-                ingestIndexPage(rawText, pageNumber, context);
-                break;
-                
-            case OAHSPE_BOOKS:
-                ingestOahspePage(rawText, pageNumber, context);
-                break;
-                
-            default:
-                log.warn("Page {} has category {} which should not be ingested", 
-                        pageNumber, category);
-                return;
+        // Special case: Page 1668 has both book content (above horizontal line) and glossary content (below)
+        if (pageNumber == 1668) {
+            log.info("Page 1668: Running BOTH OahspeParser and GlossaryParser (separated by horizontal line)");
+            ingestOahspePage(rawText, pageNumber, context);
+            ingestGlossaryPage(rawText, pageNumber, context);
+            // Fall through to linkage and marking steps below
+        } else {
+            switch (category) {
+                case GLOSSARIES:
+                    ingestGlossaryPage(rawText, pageNumber, context);
+                    break;
+                    
+                case INDEX:
+                    ingestIndexPage(rawText, pageNumber, context);
+                    break;
+                    
+                case OAHSPE_BOOKS:
+                    ingestOahspePage(rawText, pageNumber, context);
+                    break;
+                    
+                default:
+                    log.warn("Page {} has category {} which should not be ingested", 
+                            pageNumber, category);
+                    return;
+            }
         }
         
         // Link PageImages to Image entities
