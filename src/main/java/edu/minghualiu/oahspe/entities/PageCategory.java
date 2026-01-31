@@ -9,7 +9,7 @@ public enum PageCategory {
     TABLE_OF_CONTENTS("Table of Contents", 4, 4, false, false),
     IMAGE_LIST("Image List", 5, 6, false, false),
     OAHSPE_BOOKS("Oahspe Books - Main Content", 7, 1668, true, true),
-    GLOSSARIES("Glossaries", 1669, 1690, true, false),
+    GLOSSARIES("Glossaries", 1668, 1690, true, false),  // Page 1668: below horizontal line separator
     INDEX("Index", 1691, 1831, true, false);
     
     private final String label;

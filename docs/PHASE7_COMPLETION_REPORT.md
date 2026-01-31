@@ -66,7 +66,7 @@ Phase 7 successfully implements a resilient two-workflow architecture for ingest
 
 #### Services (7 files)
 1. `PageLoader.java` - PDF extraction to PageContent/PageImage
-2. `GlossaryParser.java` - Glossary page parsing (pages 1669-1690)
+2. `GlossaryParser.java` - Glossary page parsing (pages 1668-1690)
 3. `IndexParser.java` - Index page parsing (pages 1691-1831)
 4. `PageIngestionLinker.java` - Routes pages to appropriate parsers
 5. `ContentPageLinkingService.java` - Verification and reporting

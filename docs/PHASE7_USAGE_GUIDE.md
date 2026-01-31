@@ -254,7 +254,7 @@ Phase 7 categorizes all 1831 pages into 6 categories:
 | TABLE_OF_CONTENTS | 4 | ❌ | N/A |
 | IMAGE_LIST | 5-6 | ❌ | N/A |
 | **OAHSPE_BOOKS** | **7-1668** | **✅** | **OahspeParser** |
-| **GLOSSARIES** | **1669-1690** | **✅** | **GlossaryParser** |
+| **GLOSSARIES** | **1668-1690** | **✅** | **GlossaryParser** |
 | **INDEX** | **1691-1831** | **✅** | **IndexParser** |
 
 **Total pages to ingest:** 1662 pages (OAHSPE_BOOKS + GLOSSARIES + INDEX)
