@@ -10,7 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "verses",  uniqueConstraints = {@UniqueConstraint(columnNames = {"verseKey"})})
+@Table(name = "verses",
+    uniqueConstraints = {@UniqueConstraint(columnNames = {"verseKey"})},
+    indexes = {
+        @Index(name = "idx_verse_page", columnList = "page_number")
+    })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,6 +28,9 @@ public class Verse {
     private String verseKey;
     private String text;
     private String textInChinese;
+    
+    @Column(name = "page_number")
+    private Integer pageNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id", nullable = false)

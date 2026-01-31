@@ -10,7 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "chapters")
+@Table(name = "chapters",
+    indexes = {
+        @Index(name = "idx_chapter_page", columnList = "page_number")
+    })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,6 +28,9 @@ public class Chapter {
     private String description;
     private String titleInChinese;
     private String descriptionInChinese;
+    
+    @Column(name = "page_number")
+    private Integer pageNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "book_id")

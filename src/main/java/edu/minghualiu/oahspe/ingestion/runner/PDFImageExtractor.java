@@ -1,6 +1,8 @@
 package edu.minghualiu.oahspe.ingestion.runner;
 
 import edu.minghualiu.oahspe.entities.Image;
+import edu.minghualiu.oahspe.entities.PageContent;
+import edu.minghualiu.oahspe.entities.PageImage;
 import edu.minghualiu.oahspe.repositories.ImageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -303,6 +305,79 @@ public class PDFImageExtractor {
         log.debug("Image counter reset to 0");
     }
 
+    /**
+     * Extracts images from a PDF page as PageImage objects (without persisting to Image table).
+     * This is the new Phase 7 method that returns PageImage entities instead of Image entities.
+     * 
+     * @param document the loaded PDDocument
+     * @param pageNum the 1-based page number
+     * @param pageContent the parent PageContent entity
+     * @return list of PageImage objects (not yet persisted)
+     */
+    public List<PageImage> extractImagesFromPageAsObjects(PDDocument document, int pageNum, PageContent pageContent) {
+        List<PageImage> pageImages = new ArrayList<>();
+        
+        if (document == null || pageContent == null) {
+            log.warn("Cannot extract images: null document or pageContent");
+            return pageImages;
+        }
+        
+        try {
+            if (pageNum < 1 || pageNum > document.getNumberOfPages()) {
+                log.warn("Page number {} out of range (total: {})", pageNum, document.getNumberOfPages());
+                return pageImages;
+            }
+            
+            PDPage page = document.getPage(pageNum - 1); // 0-indexed
+            PDResources resources = page.getResources();
+            
+            if (resources == null) {
+                log.debug("Page {} has no resources", pageNum);
+                return pageImages;
+            }
+            
+            int sequence = 1;
+            for (COSName name : resources.getXObjectNames()) {
+                try {
+                    PDXObject xObject = resources.getXObject(name);
+                    
+                    if (xObject instanceof PDImageXObject imageXObject) {
+                        byte[] imageData = extractImageBytes(imageXObject);
+                        String format = imageXObject.getSuffix();
+                        if (format == null || format.isEmpty()) {
+                            format = "png";
+                        }
+                        String mimeType = "image/" + format.toLowerCase();
+                        
+                        PageImage pageImage = PageImage.builder()
+                                .pageContent(pageContent)
+                                .imageSequence(sequence++)
+                                .imageData(imageData)
+                                .mimeType(mimeType)
+                                .build();
+                        
+                        pageImages.add(pageImage);
+                        log.debug("Extracted PageImage sequence {} from page {} ({} bytes)", 
+                                sequence - 1, pageNum, imageData.length);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to extract image {} from page {}: {}", 
+                            name.getName(), pageNum, e.getMessage());
+                    // Continue with other images
+                }
+            }
+            
+            if (!pageImages.isEmpty()) {
+                log.info("Extracted {} PageImage objects from page {}", pageImages.size(), pageNum);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to extract PageImages from page {}: {}", pageNum, e.getMessage(), e);
+        }
+        
+        return pageImages;
+    }
+    
     /**
      * Extracts all images from all pages of a PDF file.
      * Useful for bulk extraction operations.

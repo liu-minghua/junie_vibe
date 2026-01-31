@@ -10,7 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "books")
+@Table(name = "books",
+    indexes = {
+        @Index(name = "idx_book_page", columnList = "page_number")
+    })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @Builder
 public class Book {
@@ -22,6 +25,9 @@ public class Book {
     private String description;
     private String titleInChinese;
     private String descriptionInChinese;
+    
+    @Column(name = "page_number")
+    private Integer pageNumber;
 
     @Builder.Default @OneToMany(mappedBy = "book", cascade = CascadeType.PERSIST, orphanRemoval = false)
     private List<Chapter> chapters = new ArrayList<>();
