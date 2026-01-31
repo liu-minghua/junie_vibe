@@ -140,8 +140,8 @@ AI-powered translation with model comparison and quality assurance.
    - Enable re-ingestion without re-extraction
    
 2. **Workflow 2: Content Ingestion** (2-5 minutes)
-   - Parse glossary terms (~500 terms from pages 1622-1715)
-   - Parse index entries (~5000 entries from pages 1716-1831)
+   - Parse glossary terms (~500 terms from pages 1669-1690)
+   - Parse index entries (~5000 entries from pages 1691-1831)
    - Link content to existing Books/Chapters/Verses/Notes
    - Verify all linkages successful
 
@@ -153,12 +153,12 @@ AI-powered translation with model comparison and quality assurance.
 #### Page Categories
 | Category | Pages | Required | Contains |
 |----------|-------|----------|----------|
-| FRONT_MATTER | 1-3 | No | Title, preface |
+| COVER | 1-3 | No | Cover pages |
 | TABLE_OF_CONTENTS | 4 | No | Book/chapter listing |
-| MAIN_CONTENT | 5-1621 | Yes | Books, chapters, verses, notes |
-| GLOSSARY | 1622-1715 | Yes | ~500 terms |
-| INDEX | 1716-1831 | Yes | ~5000 entries |
-| BACK_MATTER | (none) | No | Appendices |
+| IMAGE_LIST | 5-6 | No | List of images |
+| OAHSPE_BOOKS | 7-1668 | Yes | Books, chapters, verses, notes (structured content) |
+| GLOSSARIES | 1669-1690 | Yes | ~500 glossary terms |
+| INDEX | 1691-1831 | Yes | ~5000 index entries |
 
 ### Phase 8: Translation Workflow (Coming Soon)
 
