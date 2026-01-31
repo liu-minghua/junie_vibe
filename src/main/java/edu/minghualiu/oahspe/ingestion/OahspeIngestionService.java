@@ -77,6 +77,7 @@ public class OahspeIngestionService {
      *
      * @see OahspeEvent
      */
+    @Transactional
     public void ingestEvents(List<OahspeEvent> events, int pageNumber) {
         this.currentPageNumber = pageNumber;
         for (OahspeEvent event : events) {
@@ -131,7 +132,9 @@ public class OahspeIngestionService {
             currentVerse = verseRepository.save(currentVerse);
             currentNote = null;
         } else if (currentVerse != null) {
+            // Continuation line - update and save
             currentVerse.setText(currentVerse.getText() + " " + event.text());
+            currentVerse = verseRepository.save(currentVerse);
         }
     }
     
@@ -144,8 +147,11 @@ public class OahspeIngestionService {
                     .pageNumber(currentPageNumber)
                     .build();
             if (currentVerse != null) currentVerse.getNotes().add(currentNote);
+            currentNote = noteRepository.save(currentNote);
         } else if (currentNote != null) {
+            // Continuation line - update and save
             currentNote.setText(currentNote.getText() + " " + event.text());
+            currentNote = noteRepository.save(currentNote);
         }
     }
     
