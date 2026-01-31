@@ -93,8 +93,8 @@ public class PageIngestionLinker {
     /**
      * Ingests a single PageContent entity.
      * Routes to appropriate parser based on category.
-     * Special handling for page 1668: runs BOTH OahspeParser (top half) 
-     * and GlossaryParser (bottom half) since content overlaps.
+     * Special handling for page 1668: splits at horizontal line separator 
+     * to process book content (above) and glossary content (below) separately.
      * 
      * @param pageContent the page to ingest
      * @param context the ingestion context
@@ -110,9 +110,26 @@ public class PageIngestionLinker {
         
         // Special case: Page 1668 has both book content (above horizontal line) and glossary content (below)
         if (pageNumber == 1668) {
-            log.info("Page 1668: Running BOTH OahspeParser and GlossaryParser (separated by horizontal line)");
-            ingestOahspePage(rawText, pageNumber, context);
-            ingestGlossaryPage(rawText, pageNumber, context);
+            log.info("Page 1668: Splitting at horizontal line separator");
+            
+            // Split at horizontal line (typically 5+ underscores or dashes)
+            String[] parts = rawText.split("_{5,}|-{5,}");
+            
+            if (parts.length >= 2) {
+                String bookContent = parts[0];      // Above horizontal line
+                String glossaryContent = parts[1];  // Below horizontal line
+                
+                log.info("Page 1668: Split successful - processing book content ({} chars) and glossary content ({} chars) separately", 
+                        bookContent.length(), glossaryContent.length());
+                
+                ingestOahspePage(bookContent, pageNumber, context);
+                ingestGlossaryPage(glossaryContent, pageNumber, context);
+            } else {
+                // Fallback: if split fails, process full text with both parsers
+                log.warn("Page 1668: Could not find horizontal line separator, processing full text with both parsers");
+                ingestOahspePage(rawText, pageNumber, context);
+                ingestGlossaryPage(rawText, pageNumber, context);
+            }
             // Fall through to linkage and marking steps below
         } else {
             switch (category) {
