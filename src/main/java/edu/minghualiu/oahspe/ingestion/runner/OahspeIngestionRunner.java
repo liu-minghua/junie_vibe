@@ -1,5 +1,6 @@
 package edu.minghualiu.oahspe.ingestion.runner;
 
+import edu.minghualiu.oahspe.entities.Image;
 import edu.minghualiu.oahspe.ingestion.parser.OahspeParser;
 import edu.minghualiu.oahspe.ingestion.parser.OahspeEvent;
 import edu.minghualiu.oahspe.ingestion.OahspeIngestionService;
@@ -7,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
 import java.util.Optional;
@@ -52,6 +54,7 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public class OahspeIngestionRunner {
     private final PDFTextExtractor pdfExtractor;
+    private final PDFImageExtractor imageExtractor;
     private final OahspeParser parser;
     private final OahspeIngestionService ingestionService;
 
@@ -74,9 +77,9 @@ public class OahspeIngestionRunner {
      * - Database errors: Log error, add to context, continue to next page
      *
      * Transaction semantics:
-     * Each page's events are ingested atomically. If a page fails,
-     * partial entities are rolled back. The runner continues processing
-     * remaining pages.
+     * Each page's events are ingested in its own transaction (REQUIRES_NEW).
+     * If a page fails, only that page's entities are rolled back.
+     * The runner continues processing remaining pages.
      *
      * @param pdfFilePath path to the PDF file to ingest
      * @return IngestionContext with completion status and metrics
@@ -84,7 +87,6 @@ public class OahspeIngestionRunner {
      * @see IngestionContext#isSuccessful()
      * @see IngestionContext#getPageErrors()
      */
-    @Transactional
     public IngestionContext ingestPdf(String pdfFilePath) throws PDFExtractionException {
         return ingestPdfWithProgress(pdfFilePath, null);
     }
@@ -117,6 +119,9 @@ public class OahspeIngestionRunner {
         );
 
         log.info("Starting PDF ingestion: {} ({} pages)", pdfFilePath, context.getTotalPages());
+        
+        // Initialize image counter from database for idempotent restart
+        imageExtractor.initializeImageCounter();
 
         for (int pageNum = 1; pageNum <= context.getTotalPages(); pageNum++) {
             context.setCurrentPageNumber(pageNum);
@@ -171,9 +176,10 @@ public class OahspeIngestionRunner {
             }
         }
 
-        log.info("PDF ingestion complete: {} - Events: {}, Errors: {}, Time: {}ms",
+        log.info("PDF ingestion complete: {} - Events: {}, Images: {}, Errors: {}, Time: {}ms",
                 pdfFilePath,
                 context.getTotalEventsProcessed(),
+                context.getTotalImagesExtracted(),
                 context.getTotalErrorsEncountered(),
                 context.getElapsedTime());
 
@@ -186,9 +192,13 @@ public class OahspeIngestionRunner {
      *
      * Process:
      * 1. Extract page text using PDFTextExtractor
-     * 2. Parse text using OahspeParser.parse()
-     * 3. Ingest events using OahspeIngestionService.ingestEvents()
-     * 4. Update context with event count
+     * 2. Extract images using PDFImageExtractor
+     * 3. Parse text using OahspeParser.parse()
+     * 4. Ingest events using OahspeIngestionService.ingestEvents()
+     * 5. Update context with event and image counts
+     *
+     * Note: The ingestEvents() method is transactional, so each page's database
+     * operations run in their own transaction automatically.
      *
      * @param pageNumber the page number to process (1-indexed)
      * @param context the IngestionContext to update with progress
@@ -199,12 +209,25 @@ public class OahspeIngestionRunner {
         // Stage 1: Extract text
         String pageText = pdfExtractor.extractText(context.getPdfFilePath(), pageNumber);
 
+        // Stage 2: Extract images
+        try {
+            List<Image> images = imageExtractor.extractImagesFromPage(
+                    context.getPdfFilePath(), pageNumber, context);
+            context.addExtractedImages(images.size());
+            if (!images.isEmpty()) {
+                log.debug("Page {} extracted {} images", pageNumber, images.size());
+            }
+        } catch (Exception e) {
+            log.warn("Image extraction failed for page {}: {}", pageNumber, e.getMessage());
+            // Continue processing text even if image extraction fails
+        }
+
         if (pageText.isEmpty()) {
             log.debug("Page {} is empty or contains no text", pageNumber);
             return;
         }
 
-        // Stage 2: Parse text into events
+        // Stage 3: Parse text into events
         List<String> lines = Arrays.asList(pageText.split("\n"));
         List<OahspeEvent> events = parser.parse(lines, pageNumber);
 
@@ -213,7 +236,7 @@ public class OahspeIngestionRunner {
             return;
         }
 
-        // Stage 3: Ingest events into database
+        // Stage 4: Ingest events into database
         ingestionService.ingestEvents(events, pageNumber);
 
         // Update context

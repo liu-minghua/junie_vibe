@@ -52,6 +52,7 @@ public class OahspeIngestionService {
     private Verse currentVerse;
     private Note currentNote;
     private int currentPageNumber;
+    private boolean introductionChapterCreated = false;
     
     /**
      * Ingests a batch of events from the parser and updates entity context.
@@ -91,24 +92,41 @@ public class OahspeIngestionService {
     }
     
     private void handleBookStart(OahspeEvent.BookStart event) {
-        currentBook = Book.builder().title(event.title()).build();
+        currentBook = Book.builder()
+                .title(event.title())
+                .pageNumber(currentPageNumber)
+                .build();
         currentBook = bookRepository.save(currentBook);
         currentChapter = null;
         currentVerse = null;
         currentNote = null;
-        log.debug("Starting book: {}", event.title());
+        log.debug("Starting book: {} on page {}", event.title(), currentPageNumber);
     }
     
     private void handleChapterStart(OahspeEvent.ChapterStart event) {
-        currentChapter = Chapter.builder().title(event.title()).book(currentBook).build();
+        currentChapter = Chapter.builder()
+                .title(event.title())
+                .book(currentBook)
+                .pageNumber(currentPageNumber)
+                .build();
         if (currentBook != null) currentBook.getChapters().add(currentChapter);
         currentChapter = chapterRepository.save(currentChapter);
         currentVerse = null;
         currentNote = null;
     }
     private void handleVerse(OahspeEvent.Verse event) {
+        // Handle orphaned content: create introduction chapter if verse appears before any chapter
+        if (currentChapter == null && event.verseKey() != null) {
+            createIntroductionChapter();
+        }
+        
         if (event.verseKey() != null) {
-            currentVerse = Verse.builder().verseKey(event.verseKey()).text(event.text()).chapter(currentChapter).build();
+            currentVerse = Verse.builder()
+                    .verseKey(event.verseKey())
+                    .text(event.text())
+                    .chapter(currentChapter)
+                    .pageNumber(currentPageNumber)
+                    .build();
             if (currentChapter != null) currentChapter.getVerses().add(currentVerse);
             currentVerse = verseRepository.save(currentVerse);
             currentNote = null;
@@ -119,7 +137,12 @@ public class OahspeIngestionService {
     
     private void handleNote(OahspeEvent.Note event) {
         if (event.noteKey() != null) {
-            currentNote = Note.builder().noteKey(event.noteKey()).text(event.text()).verse(currentVerse).build();
+            currentNote = Note.builder()
+                    .noteKey(event.noteKey())
+                    .text(event.text())
+                    .verse(currentVerse)
+                    .pageNumber(currentPageNumber)
+                    .build();
             if (currentVerse != null) currentVerse.getNotes().add(currentNote);
         } else if (currentNote != null) {
             currentNote.setText(currentNote.getText() + " " + event.text());
@@ -176,5 +199,55 @@ public class OahspeIngestionService {
         currentChapter = null;
         currentVerse = null;
         currentNote = null;
+        introductionChapterCreated = false;
+    }
+    
+    /**
+     * Creates an "Introduction" chapter for orphaned content that appears before any formal book/chapter.
+     * 
+     * <p>This handles edge cases where verse content exists in preface/introduction sections
+     * before the first BookStart/ChapterStart events. Creates a pseudo-book and chapter to
+     * maintain database referential integrity while preserving all content.</p>
+     * 
+     * <p>The introduction book and chapter use descriptive titles to clearly distinguish
+     * them from regular content.</p>
+     */
+    private void createIntroductionChapter() {
+        if (!introductionChapterCreated) {
+            log.info("Creating introduction chapter for orphaned content before first book/chapter on page {}", currentPageNumber);
+            
+            // Create or get introduction book
+            if (currentBook == null) {
+                currentBook = Book.builder()
+                        .title("Introduction")
+                        .description("Preface and introductory content")
+                        .pageNumber(currentPageNumber)
+                        .build();
+                currentBook = bookRepository.save(currentBook);
+                log.debug("Created introduction book on page {}", currentPageNumber);
+            }
+            
+            // Create introduction chapter
+            currentChapter = Chapter.builder()
+                    .title("Preface")
+                    .description("Content before first formal chapter")
+                    .book(currentBook)
+                    .pageNumber(currentPageNumber)
+                    .build();
+            currentBook.getChapters().add(currentChapter);
+            currentChapter = chapterRepository.save(currentChapter);
+            
+            introductionChapterCreated = true;
+            log.debug("Created introduction chapter for book: {} on page {}", currentBook.getTitle(), currentPageNumber);
+        }
+    }
+    
+    /**
+     * Returns whether an introduction chapter was auto-created during this ingestion session.
+     * 
+     * @return true if introduction chapter was created for orphaned content
+     */
+    public boolean isIntroductionChapterCreated() {
+        return introductionChapterCreated;
     }
 }

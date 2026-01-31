@@ -1,0 +1,265 @@
+package edu.minghualiu.oahspe.ingestion.linker;
+
+import edu.minghualiu.oahspe.entities.*;
+import edu.minghualiu.oahspe.ingestion.OahspeIngestionService;
+import edu.minghualiu.oahspe.ingestion.parser.GlossaryParser;
+import edu.minghualiu.oahspe.ingestion.parser.IndexParser;
+import edu.minghualiu.oahspe.ingestion.parser.OahspeEvent;
+import edu.minghualiu.oahspe.ingestion.parser.OahspeParser;
+import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
+import edu.minghualiu.oahspe.ingestion.runner.ProgressCallback;
+import edu.minghualiu.oahspe.repositories.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * Service for ingesting PageContent into domain entities.
+ * Phase 3 of the page-based ingestion workflow.
+ * 
+ * Routes pages to appropriate parsers based on category:
+ * - GLOSSARIES → GlossaryParser
+ * - INDEX → IndexParser  
+ * - OAHSPE_BOOKS → OahspeParser
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PageIngestionLinker {
+    
+    private final PageContentRepository pageContentRepository;
+    private final OahspeParser oahspeParser;
+    private final GlossaryParser glossaryParser;
+    private final IndexParser indexParser;
+    private final OahspeIngestionService oahspeIngestionService;
+    private final GlossaryTermRepository glossaryTermRepository;
+    private final IndexEntryRepository indexEntryRepository;
+    private final PageImageRepository pageImageRepository;
+    private final ImageRepository imageRepository;
+    
+    /**
+     * Ingests all PageContent entities that should be ingested.
+     * 
+     * @param callback optional progress callback
+     * @return ingestion context with statistics
+     */
+    @Transactional
+    public IngestionContext ingestAllPageContents(ProgressCallback callback) {
+        log.info("Starting content ingestion from PageContent entities");
+        
+        List<PageContent> allPages = pageContentRepository.findByIngestedFalse();
+        
+        // Filter to only pages that should be ingested
+        List<PageContent> pagesToIngest = allPages.stream()
+                .filter(pc -> pc.getCategory().shouldIngest())
+                .toList();
+        
+        IngestionContext context = new IngestionContext();
+        context.setTotalPages(pagesToIngest.size());
+        
+        for (PageContent pageContent : pagesToIngest) {
+            context.setCurrentPageNumber(pageContent.getPageNumber());
+            
+            try {
+                ingestSinglePageContent(pageContent, context);
+                
+                if (callback != null && pageContent.getPageNumber() % 50 == 0) {
+                    callback.onProgress(pageContent.getPageNumber(), 
+                            pagesToIngest.size(),
+                            String.format("Ingested page %d [%s]", 
+                                    pageContent.getPageNumber(), 
+                                    pageContent.getCategory()));
+                }
+            } catch (Exception e) {
+                context.addPageError(pageContent.getPageNumber(), e.getMessage());
+                pageContent.markError(e.getMessage());
+                pageContentRepository.save(pageContent);
+                log.error("Failed to ingest page {}: {}", 
+                        pageContent.getPageNumber(), e.getMessage(), e);
+            }
+        }
+        
+        log.info("Content ingestion complete. Pages ingested: {}, Errors: {}", 
+                pagesToIngest.size() - context.getTotalErrorsEncountered(),
+                context.getTotalErrorsEncountered());
+        
+        return context;
+    }
+    
+    /**
+     * Ingests a single PageContent entity.
+     * Routes to appropriate parser based on category.
+     * 
+     * @param pageContent the page to ingest
+     * @param context the ingestion context
+     */
+    @Transactional
+    public void ingestSinglePageContent(PageContent pageContent, IngestionContext context) {
+        log.debug("Ingesting page {} [{}]", 
+                pageContent.getPageNumber(), pageContent.getCategory());
+        
+        int pageNumber = pageContent.getPageNumber();
+        PageCategory category = pageContent.getCategory();
+        String rawText = pageContent.getRawText();
+        
+        switch (category) {
+            case GLOSSARIES:
+                ingestGlossaryPage(rawText, pageNumber, context);
+                break;
+                
+            case INDEX:
+                ingestIndexPage(rawText, pageNumber, context);
+                break;
+                
+            case OAHSPE_BOOKS:
+                ingestOahspePage(rawText, pageNumber, context);
+                break;
+                
+            default:
+                log.warn("Page {} has category {} which should not be ingested", 
+                        pageNumber, category);
+                return;
+        }
+        
+        // Link PageImages to Image entities
+        linkPageImagesToImageEntities(pageContent);
+        
+        // Mark page as ingested
+        pageContent.markIngested();
+        pageContentRepository.save(pageContent);
+        
+        context.setTotalEventsProcessed(context.getTotalEventsProcessed() + 1);
+    }
+    
+    /**
+     * Ingests all pages in a specific category.
+     * 
+     * @param category the category to ingest
+     * @param callback optional progress callback
+     * @return ingestion context
+     */
+    @Transactional
+    public IngestionContext ingestCategoryPages(PageCategory category, ProgressCallback callback) {
+        log.info("Ingesting pages for category: {}", category);
+        
+        List<PageContent> pages = pageContentRepository
+                .findByCategoryAndIngestedFalse(category);
+        
+        IngestionContext context = new IngestionContext();
+        context.setTotalPages(pages.size());
+        
+        for (PageContent pageContent : pages) {
+            try {
+                ingestSinglePageContent(pageContent, context);
+                
+                if (callback != null && pageContent.getPageNumber() % 50 == 0) {
+                    callback.onProgress(pageContent.getPageNumber(), 
+                            pages.size(),
+                            String.format("Ingested page %d", 
+                                    pageContent.getPageNumber()));
+                }
+            } catch (Exception e) {
+                context.addPageError(pageContent.getPageNumber(), e.getMessage());
+                log.error("Failed to ingest page {}: {}", 
+                        pageContent.getPageNumber(), e.getMessage());
+            }
+        }
+        
+        return context;
+    }
+    
+    /**
+     * Ingests a glossary page using GlossaryParser.
+     */
+    private void ingestGlossaryPage(String rawText, int pageNumber, IngestionContext context) {
+        List<GlossaryTerm> terms = glossaryParser.parseGlossaryPage(rawText, pageNumber);
+        
+        for (GlossaryTerm term : terms) {
+            try {
+                // Check if term already exists (avoid duplicates)
+                glossaryTermRepository.findByTerm(term.getTerm())
+                        .ifPresentOrElse(
+                                existing -> log.debug("Glossary term already exists: {}", 
+                                        term.getTerm()),
+                                () -> {
+                                    glossaryTermRepository.save(term);
+                                    log.debug("Saved glossary term: {}", term.getTerm());
+                                }
+                        );
+            } catch (Exception e) {
+                log.warn("Failed to save glossary term {}: {}", 
+                        term.getTerm(), e.getMessage());
+            }
+        }
+        
+        context.setTotalEventsProcessed(context.getTotalEventsProcessed() + terms.size());
+    }
+    
+    /**
+     * Ingests an index page using IndexParser.
+     */
+    private void ingestIndexPage(String rawText, int pageNumber, IngestionContext context) {
+        List<IndexEntry> entries = indexParser.parseIndexPage(rawText, pageNumber);
+        
+        for (IndexEntry entry : entries) {
+            try {
+                // Try to link to glossary term if exists
+                glossaryTermRepository.findByTerm(entry.getTopic())
+                        .ifPresent(entry::setGlossaryTerm);
+                
+                indexEntryRepository.save(entry);
+                log.debug("Saved index entry: {}", entry.getTopic());
+                
+            } catch (Exception e) {
+                log.warn("Failed to save index entry {}: {}", 
+                        entry.getTopic(), e.getMessage());
+            }
+        }
+        
+        context.setTotalEventsProcessed(context.getTotalEventsProcessed() + entries.size());
+    }
+    
+    /**
+     * Ingests an Oahspe book page using OahspeParser.
+     */
+    private void ingestOahspePage(String rawText, int pageNumber, IngestionContext context) {
+        List<OahspeEvent> events = oahspeParser.parsePage(rawText);
+        
+        // Ingest events through existing service (will be enhanced in Task 7.5)
+        oahspeIngestionService.ingestEvents(events, pageNumber);
+        
+        context.setTotalEventsProcessed(context.getTotalEventsProcessed() + events.size());
+    }
+    
+    /**
+     * Links PageImage entities to their corresponding Image entities.
+     * Updates the linkedImageId field.
+     * 
+     * @param pageContent the page whose images should be linked
+     */
+    public void linkPageImagesToImageEntities(PageContent pageContent) {
+        List<PageImage> pageImages = pageImageRepository
+                .findByPageContentId(pageContent.getId());
+        
+        for (PageImage pageImage : pageImages) {
+            // Find corresponding Image entity by source page and sequence
+            // This assumes Image entities have already been created during initial ingestion
+            List<Image> matchingImages = imageRepository.findAll().stream()
+                    .filter(img -> img.getSourcePage() != null && 
+                                   img.getSourcePage().equals(pageContent.getPageNumber()))
+                    .toList();
+            
+            if (!matchingImages.isEmpty()) {
+                // Link to first matching image (could be enhanced with better matching logic)
+                pageImage.setLinkedImage(matchingImages.get(0));
+                pageImageRepository.save(pageImage);
+                log.debug("Linked PageImage {} to Image {}", 
+                        pageImage.getId(), matchingImages.get(0).getId());
+            }
+        }
+    }
+}
