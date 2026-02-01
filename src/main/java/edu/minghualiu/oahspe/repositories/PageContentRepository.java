@@ -26,12 +26,24 @@ public interface PageContentRepository extends JpaRepository<PageContent, Long> 
     List<PageContent> findByCategory(PageCategory category);
     
     /**
+     * Find all pages in a category that have not been ingested yet, ordered by page number.
+     */
+    List<PageContent> findByCategoryAndIngestedFalseOrderByPageNumberAsc(PageCategory category);
+    
+    /**
      * Find all pages in a category that have not been ingested yet.
+     * @deprecated Use findByCategoryAndIngestedFalseOrderByPageNumberAsc for proper ordering
      */
     List<PageContent> findByCategoryAndIngestedFalse(PageCategory category);
     
     /**
+     * Find all pages that have not been ingested yet (across all categories), ordered by page number.
+     */
+    List<PageContent> findByIngestedFalseOrderByPageNumberAsc();
+    
+    /**
      * Find all pages that have not been ingested yet (across all categories).
+     * @deprecated Use findByIngestedFalseOrderByPageNumberAsc for proper ordering
      */
     List<PageContent> findByIngestedFalse();
     

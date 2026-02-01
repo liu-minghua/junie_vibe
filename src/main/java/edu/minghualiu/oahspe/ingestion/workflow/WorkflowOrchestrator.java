@@ -48,7 +48,6 @@ public class WorkflowOrchestrator {
      * @param callback optional progress callback
      * @return final workflow state
      */
-    @Transactional
     public WorkflowState executeFullWorkflow(String pdfPath, ProgressCallback callback) {
         log.info("Starting full ingestion workflow for PDF: {}", pdfPath);
         
@@ -131,35 +130,60 @@ public class WorkflowOrchestrator {
         workflow.updatePhase(WorkflowPhase.CLEANUP);
         workflowStateRepository.save(workflow);
         
-        if (callback != null) {
-            callback.onProgress(0, 1, "Cleaning up old ingested data...");
-        }
-        
         dataCleanup.cleanupAllIngestedData();
-        
-        if (callback != null) {
-            callback.onProgress(1, 1, "Cleanup complete");
-        }
         
         log.info("Phase 2 complete: Old data cleaned up");
     }
     
     /**
      * Phase 3: Ingest content from PageContent entities.
+     * Processes each category separately with its appropriate parser.
      */
     private void executePhase3(WorkflowState workflow, ProgressCallback callback) {
         log.info("=== Phase 3: Ingesting content ===");
         workflow.updatePhase(WorkflowPhase.CONTENT_INGESTION);
         workflowStateRepository.save(workflow);
         
-        IngestionContext context = pageIngestionLinker.ingestAllPageContents(callback);
+        // Phase 3a: Ingest OAHSPE_BOOKS (pages 7-1668) using OahspeParser
+        log.info("Phase 3a: Ingesting OAHSPE_BOOKS (main content)");
+        IngestionContext booksContext = pageIngestionLinker.ingestCategoryPages(
+                edu.minghualiu.oahspe.entities.PageCategory.OAHSPE_BOOKS, callback);
         
-        if (!context.isSuccessful()) {
+        if (!booksContext.isSuccessful()) {
             throw new RuntimeException(String.format(
-                    "Phase 3 failed with %d errors", context.getTotalErrorsEncountered()));
+                    "Phase 3a (OAHSPE_BOOKS) failed with %d errors", 
+                    booksContext.getTotalErrorsEncountered()));
         }
+        log.info("Phase 3a complete: {} books processed", booksContext.getTotalEventsProcessed());
         
-        log.info("Phase 3 complete: {} events processed", context.getTotalEventsProcessed());
+        // Phase 3b: Ingest GLOSSARIES (pages 1668-1690) using GlossaryParser
+        log.info("Phase 3b: Ingesting GLOSSARIES");
+        IngestionContext glossariesContext = pageIngestionLinker.ingestCategoryPages(
+                edu.minghualiu.oahspe.entities.PageCategory.GLOSSARIES, callback);
+        
+        if (!glossariesContext.isSuccessful()) {
+            throw new RuntimeException(String.format(
+                    "Phase 3b (GLOSSARIES) failed with %d errors", 
+                    glossariesContext.getTotalErrorsEncountered()));
+        }
+        log.info("Phase 3b complete: {} glossary entries processed", glossariesContext.getTotalEventsProcessed());
+        
+        // Phase 3c: Ingest INDEX (pages 1691-1831) using IndexParser
+        log.info("Phase 3c: Ingesting INDEX");
+        IngestionContext indexContext = pageIngestionLinker.ingestCategoryPages(
+                edu.minghualiu.oahspe.entities.PageCategory.INDEX, callback);
+        
+        if (!indexContext.isSuccessful()) {
+            throw new RuntimeException(String.format(
+                    "Phase 3c (INDEX) failed with %d errors", 
+                    indexContext.getTotalErrorsEncountered()));
+        }
+        log.info("Phase 3c complete: {} index entries processed", indexContext.getTotalEventsProcessed());
+        
+        int totalEvents = booksContext.getTotalEventsProcessed() + 
+                         glossariesContext.getTotalEventsProcessed() + 
+                         indexContext.getTotalEventsProcessed();
+        log.info("Phase 3 complete: {} total events processed across all categories", totalEvents);
     }
     
     /**

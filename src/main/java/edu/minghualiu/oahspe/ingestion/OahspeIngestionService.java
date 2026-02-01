@@ -79,6 +79,10 @@ public class OahspeIngestionService {
      */
     public void ingestEvents(List<OahspeEvent> events, int pageNumber) {
         this.currentPageNumber = pageNumber;
+        
+        // Recover state if needed - handles case where previous transaction rolled back
+        recoverStateIfNeeded();
+        
         for (OahspeEvent event : events) {
             switch (event) {
                 case OahspeEvent.BookStart book -> handleBookStart(book);
@@ -88,6 +92,43 @@ public class OahspeIngestionService {
                 case OahspeEvent.ImageRef image -> handleImageRef(image);
                 case OahspeEvent.PageBreak page -> log.trace("Page {} complete", page.pageNumber());
             }
+        }
+    }
+    
+    /**
+     * Recover state from database. Always re-fetches entities to handle detachment
+     * due to transaction boundaries or rollbacks.
+     * 
+     * This method is called at the start of each page ingestion to ensure we have
+     * managed entities in the current persistence context.
+     */
+    private void recoverStateIfNeeded() {
+        // Always try to re-fetch entities to ensure they're managed in current persistence context
+        if (currentBook != null && currentBook.getId() != null) {
+            Integer bookId = currentBook.getId();
+            Long chapterId = (currentChapter != null && currentChapter.getId() != null) 
+                    ? currentChapter.getId() : null;
+            
+            // Re-fetch book
+            currentBook = bookRepository.findById(bookId).orElse(null);
+            
+            // Re-fetch chapter if we had one
+            if (chapterId != null && currentBook != null) {
+                currentChapter = chapterRepository.findById(chapterId).orElse(null);
+                // Verify chapter still belongs to current book
+                if (currentChapter != null && !currentChapter.getBook().getId().equals(currentBook.getId())) {
+                    currentChapter = null;
+                }
+            } else if (currentBook != null && !currentBook.getChapters().isEmpty()) {
+                // Get the last chapter from the book
+                currentChapter = currentBook.getChapters().get(currentBook.getChapters().size() - 1);
+            } else {
+                currentChapter = null;
+            }
+            
+            log.trace("Recovered state: book={}, chapter={}", 
+                    currentBook != null ? currentBook.getTitle() : "null",
+                    currentChapter != null ? currentChapter.getTitle() : "null");
         }
     }
     
@@ -109,10 +150,12 @@ public class OahspeIngestionService {
                 .book(currentBook)
                 .pageNumber(currentPageNumber)
                 .build();
-        if (currentBook != null) currentBook.getChapters().add(currentChapter);
+        // Don't manipulate collections - just save with the FK reference
         currentChapter = chapterRepository.save(currentChapter);
         currentVerse = null;
         currentNote = null;
+        log.debug("Created chapter: {} for book: {}", event.title(), 
+                currentBook != null ? currentBook.getTitle() : "null");
     }
     private void handleVerse(OahspeEvent.Verse event) {
         // Handle orphaned content: create introduction chapter if verse appears before any chapter
@@ -127,11 +170,14 @@ public class OahspeIngestionService {
                     .chapter(currentChapter)
                     .pageNumber(currentPageNumber)
                     .build();
-            if (currentChapter != null) currentChapter.getVerses().add(currentVerse);
+            // Don't manipulate collections - just save with the FK reference
             currentVerse = verseRepository.save(currentVerse);
             currentNote = null;
+            log.trace("Saved verse: {} on page {}", event.verseKey(), currentPageNumber);
         } else if (currentVerse != null) {
+            // Continuation line - append text
             currentVerse.setText(currentVerse.getText() + " " + event.text());
+            currentVerse = verseRepository.save(currentVerse);
         }
     }
     
@@ -143,9 +189,13 @@ public class OahspeIngestionService {
                     .verse(currentVerse)
                     .pageNumber(currentPageNumber)
                     .build();
-            if (currentVerse != null) currentVerse.getNotes().add(currentNote);
+            // Don't manipulate collections - just save with the FK reference
+            currentNote = noteRepository.save(currentNote);
+            log.trace("Saved note: {} on page {}", event.noteKey(), currentPageNumber);
         } else if (currentNote != null) {
+            // Continuation line - append text
             currentNote.setText(currentNote.getText() + " " + event.text());
+            currentNote = noteRepository.save(currentNote);
         }
     }
     
@@ -227,14 +277,13 @@ public class OahspeIngestionService {
                 log.debug("Created introduction book on page {}", currentPageNumber);
             }
             
-            // Create introduction chapter
+            // Create introduction chapter - don't manipulate collections
             currentChapter = Chapter.builder()
                     .title("Preface")
                     .description("Content before first formal chapter")
                     .book(currentBook)
                     .pageNumber(currentPageNumber)
                     .build();
-            currentBook.getChapters().add(currentChapter);
             currentChapter = chapterRepository.save(currentChapter);
             
             introductionChapterCreated = true;

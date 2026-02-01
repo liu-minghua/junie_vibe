@@ -53,12 +53,13 @@ public class OahspeParser {
 
     /**
      * Pattern for detecting verse markers and text.
-     * Format: "XX/YY.ZZ [Text...]"
+     * Format: "XX/YY.ZZ[.] [Text...]" - optional period after verse number
+     * YY can be numeric (Chapter) or letter (Section like A, B, C, D)
      * Capture groups: (1) verse key, (2) text
-     * Examples: "14/7.1 In the beginning...", "1/0.1 Jehovih spoke"
+     * Examples: "14/7.1 In the beginning...", "02/1.21. But to those...", "35/D.15. Fome..."
      */
     private static final Pattern VERSE_PATTERN = 
-        Pattern.compile("^(\\d+/\\d+\\.\\d+)\\s+(.*)$");
+        Pattern.compile("^(\\d+/[A-Za-z0-9]+\\.\\d+)\\.?\\s+(.*)$");
 
     /**
      * Pattern for detecting note/footnote markers and text.
@@ -147,11 +148,12 @@ public class OahspeParser {
         }
 
         List<OahspeEvent> events = new ArrayList<>();
-        state = ParserState.OUTSIDE_BOOK;
+        // Do NOT reset state - preserve context across pages
+        // state = ParserState.OUTSIDE_BOOK;
 
         // Always emit page break first
         events.add(new OahspeEvent.PageBreak(pageNumber));
-        log.debug("Processing page {} with {} lines", pageNumber, lines.size());
+        log.debug("Processing page {} with {} lines, starting in state {}", pageNumber, lines.size(), state);
 
         for (String line : lines) {
             line = line.trim();
@@ -279,5 +281,24 @@ public class OahspeParser {
      */
     public ParserState getState() {
         return state;
+    }
+    
+    /**
+     * Reset the parser state to OUTSIDE_BOOK.
+     * Call this at the start of a new ingestion session.
+     */
+    public void resetState() {
+        state = ParserState.OUTSIDE_BOOK;
+        log.debug("Parser state reset to OUTSIDE_BOOK");
+    }
+    
+    /**
+     * Set the parser state. Used for resuming from a known state.
+     * 
+     * @param newState the state to set
+     */
+    public void setState(ParserState newState) {
+        state = newState;
+        log.debug("Parser state set to {}", state);
     }
 }

@@ -7,6 +7,7 @@ import edu.minghualiu.oahspe.ingestion.linker.PageIngestionLinker;
 import edu.minghualiu.oahspe.ingestion.loader.PageLoader;
 import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
 import edu.minghualiu.oahspe.ingestion.runner.OahspeIngestionRunner;
+import edu.minghualiu.oahspe.ingestion.runner.ProgressCallback;
 import edu.minghualiu.oahspe.ingestion.workflow.IngestionDataCleanup;
 import edu.minghualiu.oahspe.ingestion.workflow.WorkflowOrchestrator;
 import lombok.RequiredArgsConstructor;
@@ -81,7 +82,9 @@ public class IngestionCliRunner implements CommandLineRunner {
                 break;
                 
             case "--cleanup":
-                runCleanup();
+                // Check if --confirm flag is provided (skip interactive prompt)
+                boolean skipPrompt = args.length > 1 && "--confirm".equals(args[1]);
+                runCleanup(skipPrompt);
                 break;
                 
             case "--resume":
@@ -119,6 +122,38 @@ public class IngestionCliRunner implements CommandLineRunner {
     }
     
     /**
+     * Creates a ProgressCallback implementation for CLI logging.
+     */
+    private ProgressCallback createProgressCallback() {
+        return new ProgressCallback() {
+            @Override
+            public void onPageStart(int pageNumber, int totalPages) {
+                if (pageNumber % 50 == 0) {
+                    log.info("[{}/{}] Starting page {}", pageNumber, totalPages, pageNumber);
+                }
+            }
+            
+            @Override
+            public void onPageComplete(int pageNumber, int eventsProcessed) {
+                if (pageNumber % 50 == 0) {
+                    log.info("[{}/{}] Completed page {}", pageNumber, eventsProcessed, pageNumber);
+                }
+            }
+            
+            @Override
+            public void onPageError(int pageNumber, Exception exception) {
+                log.error("[Error] Page {}: {}", pageNumber, exception.getMessage());
+            }
+            
+            @Override
+            public void onIngestionComplete(IngestionContext context) {
+                log.info("Ingestion complete: {} events processed, {} errors",
+                        context.getTotalEventsProcessed(), context.getTotalErrorsEncountered());
+            }
+        };
+    }
+    
+    /**
      * Prints help information.
      */
     private void printHelp() {
@@ -146,6 +181,7 @@ public class IngestionCliRunner implements CommandLineRunner {
         log.info("");
         log.info("  --cleanup                  Phase 2: Delete old ingested data");
         log.info("                             (Requires confirmation, preserves PageContent)");
+        log.info("  --cleanup --confirm        Skip interactive confirmation prompt");
         log.info("");
         log.info("  --resume <workflow-name>   Resume an interrupted workflow");
         log.info("");
@@ -188,7 +224,7 @@ public class IngestionCliRunner implements CommandLineRunner {
         try {
             WorkflowState workflow = workflowOrchestrator.executeFullWorkflow(
                     pdfPath,
-                    this::onProgress
+                    createProgressCallback()
             );
             
             long duration = System.currentTimeMillis() - startTime;
@@ -224,7 +260,7 @@ public class IngestionCliRunner implements CommandLineRunner {
         long startTime = System.currentTimeMillis();
         
         try {
-            IngestionContext context = pageLoader.loadAllPages(pdfPath, this::onProgress);
+            IngestionContext context = pageLoader.loadAllPages(pdfPath, createProgressCallback());
             
             long duration = System.currentTimeMillis() - startTime;
             
@@ -265,7 +301,7 @@ public class IngestionCliRunner implements CommandLineRunner {
         long startTime = System.currentTimeMillis();
         
         try {
-            IngestionContext context = pageIngestionLinker.ingestAllPageContents(this::onProgress);
+            IngestionContext context = pageIngestionLinker.ingestAllPageContents(createProgressCallback());
             
             long duration = System.currentTimeMillis() - startTime;
             
@@ -321,8 +357,9 @@ public class IngestionCliRunner implements CommandLineRunner {
     
     /**
      * Runs Phase 2: Cleanup old data (with confirmation).
+     * @param skipPrompt if true, skip interactive confirmation prompt
      */
-    private void runCleanup() {
+    private void runCleanup(boolean skipPrompt) {
         log.info("=".repeat(80));
         log.info("PHASE 2: Data Cleanup");
         log.info("=".repeat(80));
@@ -333,14 +370,18 @@ public class IngestionCliRunner implements CommandLineRunner {
         log.warn("  - PageContent will be PRESERVED for re-ingestion");
         log.warn("");
         
-        // Request confirmation
-        System.out.print("Are you sure you want to continue? (yes/no): ");
-        Scanner scanner = new Scanner(System.in);
-        String confirmation = scanner.nextLine().trim().toLowerCase();
-        
-        if (!confirmation.equals("yes")) {
-            log.info("Cleanup cancelled.");
-            return;
+        if (!skipPrompt) {
+            // Request confirmation
+            System.out.print("Are you sure you want to continue? (yes/no): ");
+            Scanner scanner = new Scanner(System.in);
+            String confirmation = scanner.nextLine().trim().toLowerCase();
+            
+            if (!confirmation.equals("yes")) {
+                log.info("Cleanup cancelled.");
+                return;
+            }
+        } else {
+            log.info("--confirm flag provided, skipping interactive prompt");
         }
         
         log.info("");
@@ -432,7 +473,7 @@ public class IngestionCliRunner implements CommandLineRunner {
             log.error("Ingestion Failed!");
             log.error("=".repeat(80));
             log.error("Error: {}", e.getMessage(), e);
-            throw e;
+            throw new RuntimeException("Legacy ingestion failed", e);
         }
     }
 }
