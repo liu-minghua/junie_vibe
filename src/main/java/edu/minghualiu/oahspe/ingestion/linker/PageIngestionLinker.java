@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -47,11 +48,13 @@ public class PageIngestionLinker {
      * @param callback optional progress callback
      * @return ingestion context with statistics
      */
-    @Transactional
     public IngestionContext ingestAllPageContents(ProgressCallback callback) {
         log.info("Starting content ingestion from PageContent entities");
         
-        List<PageContent> allPages = pageContentRepository.findByIngestedFalse();
+        // Reset parser state at start of ingestion
+        oahspeParser.resetState();
+        
+        List<PageContent> allPages = pageContentRepository.findByIngestedFalseOrderByPageNumberAsc();
         
         // Filter to only pages that should be ingested
         List<PageContent> pagesToIngest = allPages.stream()
@@ -65,14 +68,14 @@ public class PageIngestionLinker {
             context.setCurrentPageNumber(pageContent.getPageNumber());
             
             try {
+                if (callback != null && pageContent.getPageNumber() % 50 == 0) {
+                    callback.onPageStart(pageContent.getPageNumber(), pagesToIngest.size());
+                }
+                
                 ingestSinglePageContent(pageContent, context);
                 
                 if (callback != null && pageContent.getPageNumber() % 50 == 0) {
-                    callback.onProgress(pageContent.getPageNumber(), 
-                            pagesToIngest.size(),
-                            String.format("Ingested page %d [%s]", 
-                                    pageContent.getPageNumber(), 
-                                    pageContent.getCategory()));
+                    callback.onPageComplete(pageContent.getPageNumber(), 1);
                 }
             } catch (Exception e) {
                 context.addPageError(pageContent.getPageNumber(), e.getMessage());
@@ -95,11 +98,12 @@ public class PageIngestionLinker {
      * Routes to appropriate parser based on category.
      * Special handling for page 1668: splits at horizontal line separator 
      * to process book content (above) and glossary content (below) separately.
+     * Uses REQUIRES_NEW to isolate each page's transaction.
      * 
      * @param pageContent the page to ingest
      * @param context the ingestion context
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void ingestSinglePageContent(PageContent pageContent, IngestionContext context) {
         log.debug("Ingesting page {} [{}]", 
                 pageContent.getPageNumber(), pageContent.getCategory());
@@ -174,25 +178,26 @@ public class PageIngestionLinker {
         log.info("Ingesting pages for category: {}", category);
         
         List<PageContent> pages = pageContentRepository
-                .findByCategoryAndIngestedFalse(category);
+                .findByCategoryAndIngestedFalseOrderByPageNumberAsc(category);
         
         IngestionContext context = new IngestionContext();
         context.setTotalPages(pages.size());
         
         for (PageContent pageContent : pages) {
             try {
+                if (callback != null && pageContent.getPageNumber() % 50 == 0) {
+                    callback.onPageStart(pageContent.getPageNumber(), pages.size());
+                }
+                
                 ingestSinglePageContent(pageContent, context);
                 
                 if (callback != null && pageContent.getPageNumber() % 50 == 0) {
-                    callback.onProgress(pageContent.getPageNumber(), 
-                            pages.size(),
-                            String.format("Ingested page %d", 
-                                    pageContent.getPageNumber()));
+                    callback.onPageComplete(pageContent.getPageNumber(), 1);
                 }
             } catch (Exception e) {
                 context.addPageError(pageContent.getPageNumber(), e.getMessage());
                 log.error("Failed to ingest page {}: {}", 
-                        pageContent.getPageNumber(), e.getMessage());
+                        pageContent.getPageNumber(), e.getMessage(), e);
             }
         }
         
@@ -254,7 +259,9 @@ public class PageIngestionLinker {
      * Ingests an Oahspe book page using OahspeParser.
      */
     private void ingestOahspePage(String rawText, int pageNumber, IngestionContext context) {
-        List<OahspeEvent> events = oahspeParser.parsePage(rawText);
+        // Split by any combination of \r and \n
+        List<String> lines = Arrays.asList(rawText.split("\\r?\\n"));
+        List<OahspeEvent> events = oahspeParser.parse(lines, pageNumber);
         
         // Ingest events through existing service (will be enhanced in Task 7.5)
         oahspeIngestionService.ingestEvents(events, pageNumber);

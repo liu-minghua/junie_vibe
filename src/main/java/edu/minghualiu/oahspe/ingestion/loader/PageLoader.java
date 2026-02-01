@@ -20,6 +20,7 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.cos.COSName;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -42,16 +43,16 @@ public class PageLoader {
     private final PDFTextExtractor pdfTextExtractor;
     private final PageContentRepository pageContentRepository;
     private final PageImageRepository pageImageRepository;
+    private final TransactionTemplate transactionTemplate;
     
-    /**
-     * Loads all pages from the PDF into PageContent entities.
-     * Extracts text and images for each page.
+    private static final int BATCH_SIZE = 100;  // Commit every 100 pages
+    
+    /**Uses batch commits every 100 pages for progress visibility.
      * 
      * @param pdfPath absolute path to the PDF file
      * @param callback optional progress callback
      * @return ingestion context with statistics
      */
-    @Transactional
     public IngestionContext loadAllPages(String pdfPath, ProgressCallback callback) {
         log.info("Starting page loading from PDF: {}", pdfPath);
         
@@ -64,22 +65,40 @@ public class PageLoader {
         }
         
         IngestionContext context = new IngestionContext(pdfPath, totalPages);
+        List<Integer> batch = new ArrayList<>();
         
         for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
             context.setCurrentPageNumber(pageNum);
+            batch.add(pageNum);
             
-            try {
-                PageContent pageContent = loadSinglePage(pdfPath, pageNum);
-                context.setTotalEventsProcessed(context.getTotalEventsProcessed() + 1);
+            // Commit batch every BATCH_SIZE pages or at the end
+            if (batch.size() >= BATCH_SIZE || pageNum == totalPages) {
+                final List<Integer> pagesToLoad = new ArrayList<>(batch);
                 
-                if (callback != null && pageNum % 50 == 0) {
-                    callback.onProgress(pageNum, totalPages, 
-                            String.format("Loaded page %d/%d - Category: %s", 
-                                    pageNum, totalPages, pageContent.getCategory()));
-                }
-            } catch (Exception e) {
-                context.addPageError(pageNum, e.getMessage());
-                log.error("Failed to load page {}: {}", pageNum, e.getMessage(), e);
+                transactionTemplate.executeWithoutResult(status -> {
+                    for (Integer page : pagesToLoad) {
+                        try {
+                            if (callback != null && page % 50 == 0) {
+                                callback.onPageStart(page, totalPages);
+                            }
+                            
+                            PageContent pageContent = loadSinglePage(pdfPath, page);
+                            context.setTotalEventsProcessed(context.getTotalEventsProcessed() + 1);
+                            
+                            if (callback != null && page % 50 == 0) {
+                                callback.onPageComplete(page, 1);
+                            }
+                        } catch (Exception e) {
+                            context.addPageError(page, e.getMessage());
+                            log.error("Failed to load page {}: {}", page, e.getMessage(), e);
+                        }
+                    }
+                });
+                
+                log.info("Committed batch: pages {}-{}", 
+                        pagesToLoad.get(0), 
+                        pagesToLoad.get(pagesToLoad.size() - 1));
+                batch.clear();
             }
         }
         
@@ -91,13 +110,13 @@ public class PageLoader {
     
     /**
      * Loads a single page from the PDF.
+     * Must be called within a transaction context.
      * 
      * @param pdfPath absolute path to the PDF file
      * @param pageNumber 1-based page number
      * @return the created PageContent entity
      */
-    @Transactional
-    public PageContent loadSinglePage(String pdfPath, int pageNumber) {
+    private PageContent loadSinglePage(String pdfPath, int pageNumber) {
         log.debug("Loading page {}", pageNumber);
         
         // Check if page already exists
