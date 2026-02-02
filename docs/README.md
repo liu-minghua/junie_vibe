@@ -51,68 +51,60 @@ Two-workflow architecture with page-level tracking and verification gates.
 - ✅ 3 documentation guides (usage, completion report, retrospective)
 - **Status:** Production-ready, ~5700 LOC, 3-6 min workflow for 1831 pages
 
-### **Phase 8: Translation Workflow** ⬅️ NEXT
-AI-powered translation with model comparison and quality assurance.
-- Translation model integration (Claude/GPT-4 API clients)
-- Translation service with model selection
-- Translation memory for glossary term consistency
-- Enhanced entities (titleInChinese, descriptionInChinese, pinyin fields)
-- Translation workflow (glossary → titles → verses → notes → QA)
-- Quality assurance (model comparison, consistency checking, human review)
-- **Status:** Ready to start (Phase 7 prerequisites met)
+### **Phase 8: TOC-Based Ingestion with PDF Foundation Layer** ⬅️ **ACTIVE**
+Intelligent book-by-book ingestion using Table of Contents + Geometry-Aware TextFragments.
 
-## 📍 Current Status
+**NEW in Phase 8:** Fixes critical two-column PDF layout issue
+- ✅ Phase 0.5: PDF Foundation Layer (extract TextFragments with geometry)
+- ⏳ Phase 1-6: TOC-Based Workflow (as documented)
+- **Status:** Design Complete, Integration Complete - Ready for Implementation
+- **Key Files:**
+  - [PHASE8_TOC_BASED_INGESTION_DESIGN.md](PHASE8_TOC_BASED_INGESTION_DESIGN.md) - Complete architecture
+  - [PHASE8_PDF_FOUNDATION_INTEGRATION.md](PHASE8_PDF_FOUNDATION_INTEGRATION.md) - PDF Foundation Layer integration
+  - [PHASE8_IMPLEMENTATION_CHECKLIST.md](PHASE8_IMPLEMENTATION_CHECKLIST.md) - Step-by-step tasks
+  - [PHASE8_QUICK_REFERENCE.md](PHASE8_QUICK_REFERENCE.md) - Developer cheat sheet
 
-### ✅ Phase 1-6: Legacy Ingestion (COMPLETED)
-- All 5 core entity classes (Book, Chapter, Verse, Note, Image)
-- All 5 repository interfaces
-- OahspeParser with state machine
-- OahspeIngestionService
-- OahspeIngestionRunner
-- ImageNoteLinker component
-- REST API with DTOs and Controllers
-- Lombok integration
-- Complete test coverage
-- Manual validation complete
-
-### ✅ Phase 7: Page-Based Ingestion Workflow (COMPLETED)
-- **Database Schema:** 5 new tables (page_content, glossary_terms, index_entries, page_images, workflow_state)
-- **Entities:** 11 new + 4 enhanced with pageNumber tracking
-- **Services:** PageLoader, PageIngestionLinker, WorkflowOrchestrator, IngestionDataCleanup
-- **Parsers:** GlossaryParser (~500 terms), IndexParser (~5000 entries)
-- **CLI:** 6 workflow commands (--workflow, --load-pages, --ingest-pages, --verify-links, --cleanup, --help)
-- **Testing:** 69 tests (54 unit + 15 integration), 167/167 passing (100%)
-- **Performance:** 3-6 min full workflow for 1831 pages
-- **Documentation:** 3 comprehensive guides (PHASE7_USAGE_GUIDE.md, PHASE7_COMPLETION_REPORT.md, PHASE7_RETROSPECTIVE.md)
-- **Git Branch:** phase7-page-based-ingestion (pushed to origin)
-
-### 🚀 Phase 8: Translation Workflow (READY TO START)
-- **Prerequisites:** ✅ All met (page tracking, glossary, index, verification framework)
-- **Objectives:**
-  1. Integrate translation models (Claude Sonnet 3.5, GPT-4)
-  2. Implement translation service with model selection
-  3. Build translation memory for consistency
-  4. Add Chinese fields (titleInChinese, descriptionInChinese, pinyin)
-  5. Create 5-step translation workflow (glossary → titles → verses → notes → QA)
-  6. Implement quality assurance (model comparison, consistency checks)
-- **Estimated Duration:** 30-35 hours
-- **Key Deliverables:**
-  - TranslationModel API clients
-  - TranslationService with memory
-  - Enhanced entities with Chinese fields
-  - Translation CLI commands
-  - QA framework with model comparison
-  - Translation documentation
+**Critical Fix:** Previous rawText concatenation approach fails on two-column layout. Phase 0.5 extracts geometry-aware TextFragments (x, y, width, height, font properties) to correctly handle:
+- Verses broken across left/right columns
+- Verses continued across pages
+- Footnotes interleaved at column bottom
+- Perfect reading order reconstruction
 
 ## 🚀 Getting Started
 
-### For New Developers
-1. **Read Phase 7 completion:** [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md)
-2. **Understand Phase 7 retrospective:** [PHASE7_RETROSPECTIVE.md](PHASE7_RETROSPECTIVE.md)
-3. **Review Phase 7 usage:** [PHASE7_USAGE_GUIDE.md](PHASE7_USAGE_GUIDE.md)
-4. **Check Phase 8 plan:** [planning/PHASE8_IMPLEMENTATION_PLAN.md](planning/PHASE8_IMPLEMENTATION_PLAN.md) (coming soon)
+### For Phase 8 Development (CURRENT)
+1. **Read Phase 8 Foundation Layer:** [PHASE8_PDF_FOUNDATION_INTEGRATION.md](PHASE8_PDF_FOUNDATION_INTEGRATION.md)
+2. **Review complete architecture:** [PHASE8_TOC_BASED_INGESTION_DESIGN.md](PHASE8_TOC_BASED_INGESTION_DESIGN.md)
+3. **Check implementation tasks:** [PHASE8_IMPLEMENTATION_CHECKLIST.md](PHASE8_IMPLEMENTATION_CHECKLIST.md)
+4. **Use quick reference:** [PHASE8_QUICK_REFERENCE.md](PHASE8_QUICK_REFERENCE.md)
 
-### For Phase 7 Operations
+### Phase 8 Workflow (Overview)
+```bash
+# Phase 0.5: Extract TextFragments with geometry (REQUIRED)
+java -jar oahspe.jar --extract-geometry
+# Creates ~100K TextFragments with x,y,font properties
+
+# Phase 1: Extract TOC
+java -jar oahspe.jar --toc-extract
+
+# Phase 2: Register books
+java -jar oahspe.jar --toc-register
+
+# Phase 3: Assign pages
+java -jar oahspe.jar --assign-pages
+
+# Phase 4: Parse with TextFragments (NOT rawText)
+java -jar oahspe.jar --parse-book 1      # Test single book
+java -jar oahspe.jar --parse-all-books   # Parse all 38 books
+
+# Phase 5: Aggregate
+java -jar oahspe.jar --aggregate-all
+
+# Phase 6: Verify
+java -jar oahspe.jar --verify
+```
+
+### For Phase 7 Operations (Reference)
 1. **Load pages from PDF:**
    ```bash
    java -jar oahspe.jar --load-pages /path/to/oahspe.pdf
@@ -124,30 +116,44 @@ AI-powered translation with model comparison and quality assurance.
 3. **Verify verification gates passed** (3 gates: page loading, cleanup, ingestion)
 4. **Check database:** ~500 glossary terms, ~5000 index entries, 1831 pages loaded
 
-### For Phase 8 Development (Coming Soon)
-1. Set up translation API keys (Claude/GPT-4)
-2. Review translation workflow architecture
-3. Implement translation services
-4. Test with sample content
-
 ## 📚 Key Concepts
 
-### Phase 7: Page-Based Ingestion Architecture
+### Phase 8: TOC-Based Ingestion Architecture
 
-#### Two-Workflow Design
-1. **Workflow 1: Page Loading** (30-90 seconds)
-   - Extract all 1831 pages from PDF
-   - Store raw text in PageContent table
-   - Enable re-ingestion without re-extraction
-   
-2. **Workflow 2: Content Ingestion** (2-5 minutes)
-   - Parse glossary terms (~500 terms from pages 1668-1690)
-   - Parse index entries (~5000 entries from pages 1691-1831)
-   - Link content to existing Books/Chapters/Verses/Notes
-   - Verify all linkages successful
+#### Three-Layer Architecture
+1. **Structural Discovery**
+   - Extract book metadata from Table of Contents (page 4)
+   - Identify book boundaries and page ranges
+   - Single source of truth for book structure
 
-#### Verification Gates
-- **Gate 1:** Page loading completeness (requires 1831 pages)
+2. **Content Organization**
+   - Group pages by book
+   - Validate page continuity
+   - Assign pages to books for tracking
+
+3. **Intelligent Processing**
+   - Parse chapters, verses, notes with complete context
+   - Use geometry-aware TextFragments (x, y, font properties)
+   - Calculate aggregates (counts, combined text)
+   - Verify at each step
+
+#### PDF Foundation Layer (Phase 0.5)
+Critical new layer that fixes two-column PDF parsing:
+```
+rawText (BROKEN):
+  Verses split across columns
+  Footnotes at wrong position
+  Reading order destroyed
+  
+TextFragments (FIXED):
+  x, y, width, height coordinates
+  Font properties (size, bold, italic)
+  Column detection by spatial clustering
+  Reading order: left-column→right-column, top→bottom
+  Footnote identification by y-coordinate
+  
+Result: Perfect extraction despite layout complexity
+```
 - **Gate 2:** Cleanup validation (prevents accidental data loss)
 - **Gate 3:** Ingestion completeness (requires all required categories processed)
 
