@@ -95,6 +95,14 @@ public class IngestionContext {
     }
 
     /**
+ * Increments the count of processed events/pages.
+ */
+public void incrementEventsProcessed() {
+    this.totalEventsProcessed++;
+}
+
+
+    /**
      * Increments the count of orphaned verses (verses before first book/chapter).
      */
     public void incrementOrphanedVersesCount() {

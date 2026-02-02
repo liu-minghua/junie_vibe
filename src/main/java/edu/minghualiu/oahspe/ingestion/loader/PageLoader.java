@@ -39,23 +39,17 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class PageLoader {
-    
+
     private final PDFTextExtractor pdfTextExtractor;
     private final PageContentRepository pageContentRepository;
     private final PageImageRepository pageImageRepository;
     private final TransactionTemplate transactionTemplate;
-    
-    private static final int BATCH_SIZE = 100;  // Commit every 100 pages
-    
-    /**Uses batch commits every 100 pages for progress visibility.
-     * 
-     * @param pdfPath absolute path to the PDF file
-     * @param callback optional progress callback
-     * @return ingestion context with statistics
-     */
+
+    private static final int BATCH_SIZE = 100;
+
     public IngestionContext loadAllPages(String pdfPath, ProgressCallback callback) {
         log.info("Starting page loading from PDF: {}", pdfPath);
-        
+
         int totalPages;
         try {
             totalPages = pdfTextExtractor.getPageCount(pdfPath);
@@ -63,28 +57,27 @@ public class PageLoader {
             log.error("Failed to get page count: {}", e.getMessage());
             throw new RuntimeException("Cannot load pages: " + e.getMessage(), e);
         }
-        
+
         IngestionContext context = new IngestionContext(pdfPath, totalPages);
         List<Integer> batch = new ArrayList<>();
-        
+
         for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
             context.setCurrentPageNumber(pageNum);
             batch.add(pageNum);
-            
-            // Commit batch every BATCH_SIZE pages or at the end
+
             if (batch.size() >= BATCH_SIZE || pageNum == totalPages) {
                 final List<Integer> pagesToLoad = new ArrayList<>(batch);
-                
+
                 transactionTemplate.executeWithoutResult(status -> {
                     for (Integer page : pagesToLoad) {
                         try {
                             if (callback != null && page % 50 == 0) {
                                 callback.onPageStart(page, totalPages);
                             }
-                            
-                            PageContent pageContent = loadSinglePage(pdfPath, page);
-                            context.setTotalEventsProcessed(context.getTotalEventsProcessed() + 1);
-                            
+
+                            loadSinglePage(pdfPath, page);
+                            context.incrementEventsProcessed();
+
                             if (callback != null && page % 50 == 0) {
                                 callback.onPageComplete(page, 1);
                             }
@@ -94,35 +87,31 @@ public class PageLoader {
                         }
                     }
                 });
-                
-                log.info("Committed batch: pages {}-{}", 
-                        pagesToLoad.get(0), 
+
+                log.info("Committed batch: pages {}-{}",
+                        pagesToLoad.get(0),
                         pagesToLoad.get(pagesToLoad.size() - 1));
+
                 batch.clear();
             }
         }
-        
-        log.info("Page loading complete. Pages: {}, Errors: {}", 
+
+        log.info("Page loading complete. Pages: {}, Errors: {}",
                 totalPages, context.getTotalErrorsEncountered());
-        
+
         return context;
     }
-    
+
     /**
      * Loads a single page from the PDF.
-     * Must be called within a transaction context.
-     * 
-     * @param pdfPath absolute path to the PDF file
-     * @param pageNumber 1-based page number
-     * @return the created PageContent entity
      */
     private PageContent loadSinglePage(String pdfPath, int pageNumber) {
         log.debug("Loading page {}", pageNumber);
-        
-        // Check if page already exists
+
         return pageContentRepository.findByPageNumber(pageNumber)
                 .orElseGet(() -> {
-                    // Extract text
+
+                    // ---- Extract raw text ----
                     String rawText;
                     try {
                         rawText = pdfTextExtractor.extractText(pdfPath, pageNumber);
@@ -130,118 +119,149 @@ public class PageLoader {
                         log.error("Text extraction failed for page {}: {}", pageNumber, e.getMessage());
                         rawText = "";
                     }
-                    
-                    // Determine category
+
                     PageCategory category = PageCategory.fromPageNumber(pageNumber);
-                    
-                    // Create PageContent
+
+                    // ---- Cheap metadata extraction ----
+                    int textLength = rawText != null ? rawText.length() : 0;
+                    int lineCount = rawText != null && !rawText.isEmpty()
+                            ? rawText.split("\n").length
+                            : 0;
+
+                    int verseCount = 0;
+                    if (rawText != null) {
+                        var matcher = PDFTextExtractor.VERSE_PATTERN.matcher(rawText);
+                        while (matcher.find()) verseCount++;
+                    }
+
+                    boolean hasFootnoteMarkers =
+                            rawText.contains("—") ||
+                            rawText.matches("(?m)^\\d{1,2}$");
+
+                    boolean hasIllustrationKeywords =
+                            rawText.contains("Plate") ||
+                            rawText.contains("Fig") ||
+                            rawText.contains("Figure") ||
+                            rawText.contains("Illustration") ||
+                            rawText.contains("Tablet of") ||
+                            rawText.contains("Explanation of Plate");
+
+                    boolean hasSaphahKeywords =
+                            rawText.contains("Se'moin") ||
+                            rawText.contains("Saphah") ||
+                            rawText.contains("Glyph") ||
+                            rawText.contains("Tablet");
+
+                    // ---- Build PageContent ----
                     PageContent pageContent = PageContent.builder()
                             .pageNumber(pageNumber)
                             .category(category)
                             .rawText(rawText)
                             .extractedAt(LocalDateTime.now())
                             .ingested(false)
+                            .textLength(textLength)
+                            .lineCount(lineCount)
+                            .verseCount(verseCount)
+                            .hasFootnoteMarkers(hasFootnoteMarkers)
+                            .hasIllustrationKeywords(hasIllustrationKeywords)
+                            .hasSaphahKeywords(hasSaphahKeywords)
+                            .containsImages(false) // updated after extraction
                             .build();
-                    
+
                     pageContent = pageContentRepository.save(pageContent);
-                    
-                    // Extract images
+
+                    // ---- Extract images ----
                     List<PageImage> images = extractImagesFromPage(pdfPath, pageNumber, pageContent);
                     pageImageRepository.saveAll(images);
-                    
-                    log.debug("Loaded page {} [{}] - {} chars, {} images", 
+
+                    // Update containsImages
+                    if (!images.isEmpty()) {
+                        pageContent.setContainsImages(true);
+                        pageContentRepository.save(pageContent);
+                    }
+
+                    log.debug("Loaded page {} [{}] - {} chars, {} images",
                             pageNumber, category, rawText.length(), images.size());
-                    
+
                     return pageContent;
                 });
     }
-    
+
     /**
-     * Extracts images from a PDF page as PageImage objects.
-     * 
-     * @param pdfPath path to PDF
-     * @param pageNumber 1-based page number
-     * @param pageContent the parent PageContent entity
-     * @return list of PageImage objects
+     * Extracts images from a PDF page.
      */
     private List<PageImage> extractImagesFromPage(String pdfPath, int pageNumber, PageContent pageContent) {
         List<PageImage> pageImages = new ArrayList<>();
-        
+
         File file = new File(pdfPath);
         if (!file.exists()) {
             log.warn("PDF file not found for image extraction: {}", pdfPath);
             return pageImages;
         }
-        
+
         try (PDDocument document = PDDocument.load(file)) {
             if (pageNumber < 1 || pageNumber > document.getNumberOfPages()) {
                 log.warn("Page number {} out of range", pageNumber);
                 return pageImages;
             }
-            
-            PDPage page = document.getPage(pageNumber - 1); // 0-indexed
+
+            PDPage page = document.getPage(pageNumber - 1);
             PDResources resources = page.getResources();
-            
+
             if (resources == null) {
                 return pageImages;
             }
-            
+
             int sequence = 1;
             for (COSName name : resources.getXObjectNames()) {
                 PDXObject xObject = resources.getXObject(name);
-                
+
                 if (xObject instanceof PDImageXObject) {
                     PDImageXObject image = (PDImageXObject) xObject;
-                    
+
                     try {
                         BufferedImage bufferedImage = image.getImage();
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         ImageIO.write(bufferedImage, "PNG", baos);
-                        
+
                         PageImage pageImage = PageImage.builder()
                                 .pageContent(pageContent)
                                 .imageSequence(sequence++)
                                 .imageData(baos.toByteArray())
                                 .mimeType("image/png")
                                 .build();
-                        
+
                         pageImages.add(pageImage);
-                        
+
                     } catch (IOException e) {
-                        log.warn("Failed to extract image {} from page {}: {}", 
+                        log.warn("Failed to extract image {} from page {}: {}",
                                 sequence, pageNumber, e.getMessage());
                     }
                 }
             }
-            
+
         } catch (IOException e) {
-            log.error("Failed to load PDF for image extraction page {}: {}", 
+            log.error("Failed to load PDF for image extraction page {}: {}",
                     pageNumber, e.getMessage());
         }
-        
+
         return pageImages;
     }
-    
-    /**
-     * Gets a summary of page loading status for a specific category.
-     * 
-     * @param category the page category
-     * @return summary with statistics
-     */
+
     public PageRangeContentSummary getPageRangeSummary(PageCategory category) {
         long totalPages = pageContentRepository.countByCategory(category);
         long ingestedPages = pageContentRepository.countByCategoryAndIngestedTrue(category);
-        
+
         List<PageContent> pagesWithErrors = pageContentRepository.findByErrorMessageIsNotNull();
         long errorCount = pagesWithErrors.stream()
                 .filter(pc -> pc.getCategory() == category)
                 .count();
-        
+
         List<PageContent> categoryPages = pageContentRepository.findByCategory(category);
         int totalImages = categoryPages.stream()
                 .mapToInt(pc -> (int) pageImageRepository.countByPageContentId(pc.getId()))
                 .sum();
-        
+
         return PageRangeContentSummary.builder()
                 .category(category)
                 .pageRange(category.getStartPage() + "-" + category.getEndPage())
