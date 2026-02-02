@@ -1328,7 +1328,7 @@ Next: java -jar oahspe.jar --toc-register
 ```
 
 **What It Does:**
-- Creates 66 Book entities with metadata
+- Creates38Book entities with metadata
 - Sets: title, bookNumber, startPage, endPage
 - Does NOT parse content yet
 
@@ -1624,7 +1624,7 @@ Page Coverage:
   ✓ All pages in correct book range
 
 Sanity Checks:
-  ✓ Total books: 66 (expected 66)
+  ✓ Total books:38(expected 66)
   ✓ Total chapters: 847 (expected 500-1000)
   ✓ Total verses: 15,432 (expected 10,000-20,000)
   ✓ Total notes: 523 (expected 100-1,000)

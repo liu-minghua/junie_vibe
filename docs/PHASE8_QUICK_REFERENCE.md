@@ -242,7 +242,7 @@ SELECT COUNT(*) FROM chapters WHERE verse_count IS NOT NULL AND verse_count > 0;
 ## Expected Data Ranges (Success Criteria)
 
 ```
-Books:     66 (exact)
+Books:    38(exact)
 Chapters:  500-1000
 Verses:    10,000-20,000
 Notes:     100-1,000
@@ -260,7 +260,7 @@ Pages:     1,662 (exact)
 ✅ **Aggregation Separate** - Independent phase, can re-run safely  
 ✅ **Manual Checkpoints** - User verifies before proceeding  
 ✅ **Verification Gates** - Fail fast on first problem  
-✅ **Single-Book Testing** - Test 1 book before processing 66  
+✅ **Single-Book Testing** - Test 1 book before processing 38  
 
 ---
 
@@ -313,7 +313,7 @@ Phase 6:
 
 Testing:
 - [ ] Single-book workflow works
-- [ ] Full 66-book workflow works
+- [ ] Full 38-book workflow works
 - [ ] All SQL verification queries work
 - [ ] Error recovery procedures tested
 - [ ] CLI commands documented
