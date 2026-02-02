@@ -41,11 +41,6 @@ public interface PageContentRepository extends JpaRepository<PageContent, Long> 
      */
     List<PageContent> findByIngestedFalseOrderByPageNumberAsc();
     
-    /**
-     * Find all pages that have not been ingested yet (across all categories).
-     * @deprecated Use findByIngestedFalseOrderByPageNumberAsc for proper ordering
-     */
-    List<PageContent> findByIngestedFalse();
     
     /**
      * Count pages in a specific category.

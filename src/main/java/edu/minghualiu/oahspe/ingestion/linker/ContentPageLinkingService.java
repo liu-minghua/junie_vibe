@@ -83,7 +83,7 @@ public class ContentPageLinkingService {
     public List<PageContentSummary> findUnlinkedPages() {
         List<PageContentSummary> summaries = new ArrayList<>();
         
-        List<PageContent> unlinkedPages = pageContentRepository.findByIngestedFalse();
+        List<PageContent> unlinkedPages = pageContentRepository.findByIngestedFalseOrderByPageNumberAsc();
         
         for (PageContent page : unlinkedPages) {
             // Only report pages that should have been ingested

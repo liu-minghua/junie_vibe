@@ -12,6 +12,8 @@ import edu.minghualiu.oahspe.repositories.WorkflowStateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 
 import java.util.List;
 
@@ -204,7 +206,7 @@ public class WorkflowOrchestrator {
 
     private boolean verifyIngestion() {
         List<edu.minghualiu.oahspe.entities.PageContent> unprocessed =
-                pageContentRepository.findByIngestedFalse();
+                pageContentRepository.findByIngestedFalseOrderByPageNumberAsc();
 
         return unprocessed.stream()
                 .filter(pc -> pc.getCategory().shouldIngest())
@@ -213,9 +215,35 @@ public class WorkflowOrchestrator {
 
     private String generateStatistics() {
         long totalPages = pageContentRepository.count();
-        long ingestedPages = pageContentRepository.findByIngestedFalse().size();
+        long ingestedPages = pageContentRepository.findByIngestedFalseOrderByPageNumberAsc().size();
 
         return String.format("Total pages: %d, Ingested: %d",
                 totalPages, EXPECTED_TOTAL_PAGES - ingestedPages);
     }
+    /**
+ * Resumes an interrupted workflow from its last saved state.
+ *
+ * @param workflowName the workflow to resume
+ * @return workflow state
+ */
+@Transactional
+public WorkflowState resumeWorkflow(String workflowName) {
+    WorkflowState workflow = workflowStateRepository
+            .findByWorkflowName(workflowName)
+            .orElseThrow(() -> new RuntimeException(
+                    "No workflow found with name: " + workflowName));
+
+    if (workflow.isTerminal()) {
+        log.warn("Workflow {} is already in terminal state: {}", 
+                workflowName, workflow.getStatus());
+        return workflow;
+    }
+
+    log.info("Resuming workflow from phase: {}", workflow.getCurrentPhase());
+
+    // Resume from current phase (pdfPath would need to be stored in statistics)
+    throw new UnsupportedOperationException(
+            "Resume not yet implemented - need to store pdfPath in workflow state");
+}
+
 }

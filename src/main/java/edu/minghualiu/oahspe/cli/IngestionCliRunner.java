@@ -111,6 +111,9 @@ public class IngestionCliRunner implements CommandLineRunner {
                 }
                 break;
         }
+        
+        // Exit application after command completes
+        System.exit(0);
     }
 
     // ---------- Manual test helpers ----------

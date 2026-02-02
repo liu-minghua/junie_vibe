@@ -4,6 +4,9 @@
 -- Description: Add lightweight classification metadata to page_contents table
 --              to support two-step classification strategy for determining 
 --              when expensive PDF geometry extraction is needed.
+-- STATUS: DISABLED - Moved to migrations_disabled/ folder
+--         Flyway is disabled in application.properties and application-persistent.properties
+--         Hibernate DDL (spring.jpa.hibernate.ddl-auto) handles schema creation instead
 
 -- =====================================================================
 -- MIGRATION SUMMARY
@@ -40,35 +43,41 @@
 --
 -- =====================================================================
 
+-- Note: This migration assumes page_contents table already exists
+-- (created by Hibernate/JPA schema generation).
+-- If table doesn't exist, ensure spring.jpa.hibernate.ddl-auto is set to 'create-drop' or 'update'
+-- before running migrations.
+
 -- Add Step 1 classification metadata (cheap extraction results)
-ALTER TABLE page_contents ADD COLUMN text_length INT;
-ALTER TABLE page_contents ADD COLUMN line_count INT;
-ALTER TABLE page_contents ADD COLUMN verse_count INT;
-ALTER TABLE page_contents ADD COLUMN has_footnote_markers BOOLEAN;
-ALTER TABLE page_contents ADD COLUMN has_illustration_keywords BOOLEAN;
-ALTER TABLE page_contents ADD COLUMN has_saphah_keywords BOOLEAN;
+-- All columns are nullable to support existing data and graceful degradation
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS text_length INT;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS line_count INT;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS verse_count INT;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS has_footnote_markers BOOLEAN;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS has_illustration_keywords BOOLEAN;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS has_saphah_keywords BOOLEAN;
 
 -- Add cheap image detection (does NOT store geometry)
 -- True if PDFBox detects images on this page
-ALTER TABLE page_contents ADD COLUMN contains_images BOOLEAN;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS contains_images BOOLEAN;
 
 -- Add Step 2 classification results (calculated from Step 1 metrics)
 -- needsGeometry: Whether PDF geometry extraction is necessary (default: false)
 -- This is the key field for optimizing extraction cost
-ALTER TABLE page_contents ADD COLUMN needs_geometry BOOLEAN DEFAULT FALSE;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS needs_geometry BOOLEAN DEFAULT FALSE;
 
 -- isBookContent: Whether page is book content vs glossary/index
-ALTER TABLE page_contents ADD COLUMN is_book_content BOOLEAN;
+ALTER TABLE page_contents ADD COLUMN IF NOT EXISTS is_book_content BOOLEAN;
 
 -- =====================================================================
 -- INDEXES for efficient classification-based queries
 -- =====================================================================
 
 -- Index on needs_geometry to quickly find pages requiring geometry work
-CREATE INDEX idx_needs_geometry ON page_contents(needs_geometry);
+CREATE INDEX IF NOT EXISTS idx_needs_geometry ON page_contents(needs_geometry);
 
 -- Index on is_book_content to filter book content vs reference material
-CREATE INDEX idx_is_book_content ON page_contents(is_book_content);
+CREATE INDEX IF NOT EXISTS idx_is_book_content ON page_contents(is_book_content);
 
 -- =====================================================================
 -- MIGRATION NOTES
