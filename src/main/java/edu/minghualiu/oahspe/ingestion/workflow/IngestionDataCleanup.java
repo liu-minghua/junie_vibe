@@ -29,8 +29,8 @@ public class IngestionDataCleanup {
     /**
      * Deletes all ingested domain entities.
      * Preserves PageContent and PageImage for re-ingestion.
-     * 
-     * WARNING: This is destructive! All books, chapters, verses, notes, 
+     *
+     * WARNING: This is destructive! All books, chapters, verses, notes,
      * glossary terms, and index entries will be permanently deleted.
      */
     @Transactional
@@ -144,4 +144,27 @@ public class IngestionDataCleanup {
         log.info("Content cleanup complete: {} books, {} chapters, {} verses, {} notes, {} images deleted",
                 bookCount, chapterCount, verseCount, noteCount, imageCount);
     }
+
+    /**
+ * Manual-testing helper:
+ * Deletes ALL PageContent and PageImage rows.
+ *
+ * This method is intentionally separate from the main cleanup workflow
+ * to avoid disrupting production ingestion behavior.
+ */
+@Transactional
+public void cleanupPageContentsAndImagesForTesting() {
+    log.warn("=== MANUAL TEST CLEANUP: Deleting ALL PageContent + PageImage ===");
+
+    long imgCount = pageImageRepository.count();
+    long pageCount = pageContentRepository.count();
+
+    pageImageRepository.deleteAll();
+    pageContentRepository.deleteAll();
+
+    log.info("Deleted {} PageImage rows", imgCount);
+    log.info("Deleted {} PageContent rows", pageCount);
+    log.warn("PageContent + PageImage tables are now EMPTY (manual test mode).");
+}
+
 }

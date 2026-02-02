@@ -92,6 +92,10 @@ public class IngestionCliRunner implements CommandLineRunner {
             case "-h":
                 printHelp();
                 break;
+            case "--cleanup-pages":
+                boolean skip = args.length > 1 && "--confirm".equals(args[1]);
+                runCleanupPages(skip);
+                break;
 
             default:
                 if (command.startsWith("--")) {
@@ -103,6 +107,55 @@ public class IngestionCliRunner implements CommandLineRunner {
                 break;
         }
     }
+
+ /**
+ * Manual Test Cleanup:
+ * Deletes ALL PageContent + PageImage rows.
+ * Does NOT affect Books/Chapters/Verses/etc.
+ */
+private void runCleanupPages(boolean skipPrompt) {
+    log.info("=".repeat(80));
+    log.info("MANUAL TEST CLEANUP: PageContent + PageImage");
+    log.info("=".repeat(80));
+    log.warn("");
+    log.warn("⚠ WARNING: This will DELETE ALL PageContent and PageImage rows!");
+    log.warn("  - This is ONLY for manual testing of Phase 1");
+    log.warn("  - Books/Chapters/Verses/etc. will NOT be touched");
+    log.warn("");
+
+    if (!skipPrompt) {
+        System.out.print("Are you sure you want to delete ALL PageContent + PageImage? (yes/no): ");
+        Scanner scanner = new Scanner(System.in);
+        String confirmation = scanner.nextLine().trim().toLowerCase();
+
+        if (!confirmation.equals("yes")) {
+            log.info("Cleanup cancelled.");
+            return;
+        }
+    } else {
+        log.info("--confirm flag provided, skipping interactive prompt");
+    }
+
+    log.info("");
+    log.info("Proceeding with PageContent + PageImage cleanup...");
+
+    try {
+        dataCleanup.cleanupPageContentsAndImagesForTesting();
+
+        log.info("");
+        log.info("=".repeat(80));
+        log.info("✓ PAGE CONTENT CLEANUP COMPLETE!");
+        log.info("=".repeat(80));
+
+    } catch (Exception e) {
+        log.error("=".repeat(80));
+        log.error("✗ PAGE CONTENT CLEANUP FAILED!");
+        log.error("=".repeat(80));
+        log.error("Error: {}", e.getMessage(), e);
+        throw new RuntimeException("Page content cleanup failed", e);
+    }
+}
+   
 
     /* ============================================================
      * NEW MANUAL TEST METHOD
