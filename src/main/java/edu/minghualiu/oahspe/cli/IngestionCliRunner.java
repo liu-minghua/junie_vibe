@@ -40,9 +40,7 @@ public class IngestionCliRunner implements CommandLineRunner {
 
         switch (command) {
 
-            /* ============================================================
-             * NEW MANUAL TEST OPTION
-             * ============================================================ */
+            // Manual test: Phase 1 only
             case "--test-phase1":
                 if (args.length < 2) {
                     log.error("Missing PDF path. Usage: --test-phase1 <pdf-path>");
@@ -50,6 +48,14 @@ public class IngestionCliRunner implements CommandLineRunner {
                 }
                 runTestPhase1(args[1]);
                 break;
+
+            // Manual test: cleanup PageContent + PageImage only
+            case "--cleanup-pages":
+                {
+                    boolean skipPrompt = args.length > 1 && "--confirm".equals(args[1]);
+                    runCleanupPages(skipPrompt);
+                    break;
+                }
 
             case "--workflow":
                 if (args.length < 2) {
@@ -76,9 +82,11 @@ public class IngestionCliRunner implements CommandLineRunner {
                 break;
 
             case "--cleanup":
-                boolean skipPrompt = args.length > 1 && "--confirm".equals(args[1]);
-                runCleanup(skipPrompt);
-                break;
+                {
+                    boolean skipPrompt = args.length > 1 && "--confirm".equals(args[1]);
+                    runCleanup(skipPrompt);
+                    break;
+                }
 
             case "--resume":
                 if (args.length < 2) {
@@ -92,74 +100,20 @@ public class IngestionCliRunner implements CommandLineRunner {
             case "-h":
                 printHelp();
                 break;
-            case "--cleanup-pages":
-                boolean skip = args.length > 1 && "--confirm".equals(args[1]);
-                runCleanupPages(skip);
-                break;
 
             default:
                 if (command.startsWith("--")) {
                     log.error("Unknown command: {}", command);
                     printHelp();
                 } else {
+                    // Legacy mode: assume it's a PDF path
                     runLegacyIngestion(command);
                 }
                 break;
         }
     }
 
- /**
- * Manual Test Cleanup:
- * Deletes ALL PageContent + PageImage rows.
- * Does NOT affect Books/Chapters/Verses/etc.
- */
-private void runCleanupPages(boolean skipPrompt) {
-    log.info("=".repeat(80));
-    log.info("MANUAL TEST CLEANUP: PageContent + PageImage");
-    log.info("=".repeat(80));
-    log.warn("");
-    log.warn("⚠ WARNING: This will DELETE ALL PageContent and PageImage rows!");
-    log.warn("  - This is ONLY for manual testing of Phase 1");
-    log.warn("  - Books/Chapters/Verses/etc. will NOT be touched");
-    log.warn("");
-
-    if (!skipPrompt) {
-        System.out.print("Are you sure you want to delete ALL PageContent + PageImage? (yes/no): ");
-        Scanner scanner = new Scanner(System.in);
-        String confirmation = scanner.nextLine().trim().toLowerCase();
-
-        if (!confirmation.equals("yes")) {
-            log.info("Cleanup cancelled.");
-            return;
-        }
-    } else {
-        log.info("--confirm flag provided, skipping interactive prompt");
-    }
-
-    log.info("");
-    log.info("Proceeding with PageContent + PageImage cleanup...");
-
-    try {
-        dataCleanup.cleanupPageContentsAndImagesForTesting();
-
-        log.info("");
-        log.info("=".repeat(80));
-        log.info("✓ PAGE CONTENT CLEANUP COMPLETE!");
-        log.info("=".repeat(80));
-
-    } catch (Exception e) {
-        log.error("=".repeat(80));
-        log.error("✗ PAGE CONTENT CLEANUP FAILED!");
-        log.error("=".repeat(80));
-        log.error("Error: {}", e.getMessage(), e);
-        throw new RuntimeException("Page content cleanup failed", e);
-    }
-}
-   
-
-    /* ============================================================
-     * NEW MANUAL TEST METHOD
-     * ============================================================ */
+    // ---------- Manual test helpers ----------
 
     /**
      * Manual Test: Phase 1 only (load pages, no cleanup, no ingestion).
@@ -203,9 +157,55 @@ private void runCleanupPages(boolean skipPrompt) {
         }
     }
 
-    /* ============================================================
-     * EXISTING METHODS BELOW (UNCHANGED)
-     * ============================================================ */
+    /**
+     * Manual Test Cleanup:
+     * Deletes ALL PageContent + PageImage rows.
+     * Does NOT affect Books/Chapters/Verses/etc.
+     */
+    private void runCleanupPages(boolean skipPrompt) {
+        log.info("=".repeat(80));
+        log.info("MANUAL TEST CLEANUP: PageContent + PageImage");
+        log.info("=".repeat(80));
+        log.warn("");
+        log.warn("⚠ WARNING: This will DELETE ALL PageContent and PageImage rows!");
+        log.warn("  - This is ONLY for manual testing of Phase 1");
+        log.warn("  - Books/Chapters/Verses/etc. will NOT be touched");
+        log.warn("");
+
+        if (!skipPrompt) {
+            System.out.print("Are you sure you want to delete ALL PageContent + PageImage? (yes/no): ");
+            Scanner scanner = new Scanner(System.in);
+            String confirmation = scanner.nextLine().trim().toLowerCase();
+
+            if (!confirmation.equals("yes")) {
+                log.info("Cleanup cancelled.");
+                return;
+            }
+        } else {
+            log.info("--confirm flag provided, skipping interactive prompt");
+        }
+
+        log.info("");
+        log.info("Proceeding with PageContent + PageImage cleanup...");
+
+        try {
+            dataCleanup.cleanupPageContentsAndImagesForTesting();
+
+            log.info("");
+            log.info("=".repeat(80));
+            log.info("✓ PAGE CONTENT CLEANUP COMPLETE!");
+            log.info("=".repeat(80));
+
+        } catch (Exception e) {
+            log.error("=".repeat(80));
+            log.error("✗ PAGE CONTENT CLEANUP FAILED!");
+            log.error("=".repeat(80));
+            log.error("Error: {}", e.getMessage(), e);
+            throw new RuntimeException("Page content cleanup failed", e);
+        }
+    }
+
+    // ---------- Shared helpers ----------
 
     private ProgressCallback createProgressCallback() {
         return new ProgressCallback() {
@@ -248,19 +248,23 @@ private void runCleanupPages(boolean skipPrompt) {
         log.info("COMMANDS:");
         log.info("");
         log.info("  --test-phase1 <pdf>        Manual Test: Phase 1 only (load pages)");
+        log.info("  --cleanup-pages [--confirm] Delete ALL PageContent + PageImage (manual testing only)");
         log.info("");
         log.info("  --workflow <pdf>           Run complete 3-phase workflow");
-        log.info("  --load-pages <pdf>         Phase 1: Load pages");
-        log.info("  --ingest-pages             Phase 3: Ingest content");
+        log.info("  --load-pages <pdf>         Phase 1: Load all pages from PDF");
+        log.info("  --ingest-pages             Phase 3: Ingest loaded pages");
         log.info("  --verify-links             Verify content-page linking");
-        log.info("  --cleanup [--confirm]      Phase 2: Cleanup old data");
-        log.info("  --resume <workflow-name>   Resume workflow");
-        log.info("  <pdf>                      Legacy ingestion");
-        log.info("  --help, -h                 Show help");
+        log.info("  --cleanup [--confirm]      Phase 2: Delete ingested domain data");
+        log.info("  --resume <workflow-name>   Resume an interrupted workflow");
+        log.info("");
+        log.info("  <pdf>                      Legacy mode: Run old ingestion");
+        log.info("  --help, -h                 Show this help message");
         log.info("");
         log.info("=".repeat(80));
         log.info("");
     }
+
+    // ---------- Existing workflow commands ----------
 
     private void runFullWorkflow(String pdfPath) {
         log.info("=".repeat(80));
@@ -401,7 +405,7 @@ private void runCleanupPages(boolean skipPrompt) {
         log.info("PHASE 2: Data Cleanup");
         log.info("=".repeat(80));
         log.warn("");
-        log.warn("⚠ WARNING: This will DELETE all ingested data!");
+        log.warn("⚠ WARNING: This will DELETE all ingested domain data!");
         log.warn("  - Books, Chapters, Verses, Notes");
         log.warn("  - Glossary Terms, Index Entries");
         log.warn("  - PageContent is preserved");
@@ -417,7 +421,7 @@ private void runCleanupPages(boolean skipPrompt) {
                 return;
             }
         } else {
-            log.info("--confirm flag provided, skipping prompt");
+            log.info("--confirm flag provided, skipping interactive prompt");
         }
 
         log.info("");
@@ -467,3 +471,43 @@ private void runCleanupPages(boolean skipPrompt) {
         log.info("LEGACY MODE: Old Ingestion Runner");
         log.info("=".repeat(80));
         log.info("PDF File: {}", pdfPath);
+        log.warn("Note: Consider using --workflow for new Phase 7 workflow");
+        log.info("");
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            IngestionContext context = ingestionRunner.ingestPdf(pdfPath);
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            log.info("=".repeat(80));
+            log.info("Ingestion Complete!");
+            log.info("=".repeat(80));
+            log.info("Duration: {} ms ({} seconds)", duration, duration / 1000.0);
+            log.info("Results:");
+            log.info("  Pages Processed: {}", context.getTotalPages());
+            log.info("  Images Extracted: {}", context.getTotalImagesExtracted());
+            log.info("  Duplicate Images Skipped: {}", context.getDuplicateImagesSkipped());
+            log.info("  Orphaned Verses: {}", context.getOrphanedVersesCount());
+            log.info("  Events Processed: {}", context.getTotalEventsProcessed());
+            log.info("  Page Errors: {}", context.getPageErrors().size());
+
+            if (!context.getPageErrors().isEmpty()) {
+                log.warn("Errors encountered:");
+                context.getPageErrors().forEach(error ->
+                        log.warn("  {}", error)
+                );
+            }
+
+            log.info("=".repeat(80));
+
+        } catch (Exception e) {
+            log.error("=".repeat(80));
+            log.error("Ingestion Failed!");
+            log.error("=".repeat(80));
+            log.error("Error: {}", e.getMessage(), e);
+            throw new RuntimeException("Legacy ingestion failed", e);
+        }
+    }
+}
