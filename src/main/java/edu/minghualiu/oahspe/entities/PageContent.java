@@ -8,14 +8,17 @@ import java.time.LocalDateTime;
 
 /**
  * Stores raw text content extracted from each PDF page.
- * Acts as the source of truth for page-by-page ingestion workflow.
+ * Also stores lightweight metadata used for page classification
+ * (to determine whether geometry extraction is needed).
  */
 @Entity
 @Table(name = "page_contents",
     indexes = {
         @Index(name = "idx_page_number", columnList = "page_number", unique = true),
         @Index(name = "idx_category", columnList = "category"),
-        @Index(name = "idx_ingested", columnList = "ingested")
+        @Index(name = "idx_ingested", columnList = "ingested"),
+        @Index(name = "idx_needs_geometry", columnList = "needs_geometry"),
+        @Index(name = "idx_is_book_content", columnList = "is_book_content")
     })
 @Getter
 @Setter
@@ -23,6 +26,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class PageContent {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -52,39 +56,72 @@ public class PageContent {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    /* ---------------------------------------------------------
+     * Lightweight classification metadata (Step 1)
+     * --------------------------------------------------------- */
+
+    @Column(name = "text_length")
+    private Integer textLength;
+
+    @Column(name = "line_count")
+    private Integer lineCount;
+
+    @Column(name = "verse_count")
+    private Integer verseCount;
+
+    @Column(name = "has_footnote_markers")
+    private Boolean hasFootnoteMarkers;
+
+    @Column(name = "has_illustration_keywords")
+    private Boolean hasIllustrationKeywords;
+
+    @Column(name = "has_saphah_keywords")
+    private Boolean hasSaphahKeywords;
+
     /**
-     * Returns true if this page encountered an error during extraction or ingestion.
+     * Cheap image detection (does NOT store geometry).
+     * True if PDFBox reports images on this page.
      */
+    @Column(name = "contains_images")
+    private Boolean containsImages;
+
+    /* ---------------------------------------------------------
+     * Step 2 classification results
+     * --------------------------------------------------------- */
+
+    @Column(name = "needs_geometry")
+    private Boolean needsGeometry;
+
+    @Column(name = "is_book_content")
+    private Boolean isBookContent;
+
+    /* ---------------------------------------------------------
+     * Utility methods
+     * --------------------------------------------------------- */
+
     public boolean hasError() {
         return errorMessage != null && !errorMessage.isEmpty();
     }
 
-    /**
-     * Marks this page as successfully ingested.
-     */
     public void markIngested() {
         this.ingested = true;
         this.ingestedAt = LocalDateTime.now();
         this.errorMessage = null;
     }
 
-    /**
-     * Marks this page as failed with an error message.
-     */
     public void markError(String error) {
         this.errorMessage = error;
         this.ingested = false;
         this.ingestedAt = null;
     }
 
-    /**
-     * Returns a brief summary of this page for logging.
-     */
     public String getSummary() {
-        return String.format("Page %d [%s] - %s chars - %s", 
-                pageNumber,
-                category,
-                rawText != null ? rawText.length() : 0,
-                ingested ? "INGESTED" : "PENDING");
+        return String.format(
+            "Page %d [%s] - %s chars - %s",
+            pageNumber,
+            category,
+            rawText != null ? rawText.length() : 0,
+            ingested ? "INGESTED" : "PENDING"
+        );
     }
 }

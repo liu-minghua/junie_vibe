@@ -2,7 +2,8 @@
 
 **Date:** January 31, 2026  
 **Version:** 1.0  
-**Audience:** Developers and operators running Oahspe ingestion
+**Audience:** Developers and operators running Oahspe ingestion  
+**Related:** [Database Migrations](DATABASE_MIGRATIONS.md) | [Migration V001 Quick Reference](FLYWAY_MIGRATION_V001_QUICK_REFERENCE.md)
 
 ---
 
@@ -195,13 +196,49 @@ mvn spring-boot:run -Dspring-boot.run.arguments="data/OAHSPE.pdf"
 
 ---
 
+## Database Migrations
+
+### Automatic Schema Management
+
+Flyway migrations run automatically on application startup:
+
+```bash
+mvn spring-boot:run
+```
+
+**First time setup:**
+1. Application starts
+2. Flyway detects missing migrations
+3. Applies all pending migrations (currently V001)
+4. Populates schema
+5. Application ready to use
+
+### Migration V001: Classification Metadata
+
+**File:** `src/main/resources/db/migration/V001__Initial_PageContent_Classification_Metadata.sql`
+
+**Purpose:** Add lightweight classification fields to support two-step approach for identifying pages needing geometry extraction.
+
+**New Columns:**
+- `text_length`, `line_count`, `verse_count` - Step 1 metrics
+- `has_footnote_markers`, `has_illustration_keywords`, `has_saphah_keywords`, `contains_images` - Classification flags
+- `needs_geometry`, `is_book_content` - Step 2 results
+
+**Duration:** <5 seconds  
+**Impact:** Zero (additive only, all columns nullable)  
+**Indexes:** idx_needs_geometry, idx_is_book_content
+
+**For more details:** See [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md) and [FLYWAY_MIGRATION_V001_QUICK_REFERENCE.md](FLYWAY_MIGRATION_V001_QUICK_REFERENCE.md)
+
+---
+
 ## Database Schema
 
 ### Key Tables
 
 #### page_contents
 
-Stores raw extracted page data:
+Stores raw extracted page data with lightweight classification metadata:
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -213,6 +250,15 @@ Stores raw extracted page data:
 | ingested | BOOLEAN | Whether parsed into entities |
 | ingested_at | TIMESTAMP | When ingestion completed |
 | error_message | TEXT | Any extraction/ingestion errors |
+| **text_length** | **INT** | **Length of raw text (Step 1 classification)** |
+| **line_count** | **INT** | **Number of lines (Step 1 classification)** |
+| **verse_count** | **INT** | **Number of verses detected (Step 1 classification)** |
+| **has_footnote_markers** | **BOOLEAN** | **Step 1 classification flag** |
+| **has_illustration_keywords** | **BOOLEAN** | **Step 1 classification flag** |
+| **has_saphah_keywords** | **BOOLEAN** | **Step 1 classification flag** |
+| **contains_images** | **BOOLEAN** | **Cheap image detection (no geometry stored)** |
+| **needs_geometry** | **BOOLEAN** | **Step 2 result: geometry extraction needed?** |
+| **is_book_content** | **BOOLEAN** | **Step 2 result: is this book content?** |
 
 #### page_images
 
@@ -258,6 +304,47 @@ Phase 7 categorizes all 1831 pages into 6 categories:
 | **INDEX** | **1691-1831** | **✅** | **IndexParser** |
 
 **Total pages to ingest:** 1662 pages (OAHSPE_BOOKS + GLOSSARIES + INDEX)
+
+---
+
+## Classification Strategy
+
+### Two-Step Classification (Lightweight & Efficient)
+
+PageContent implements a two-step classification approach to determine which pages need expensive PDF geometry extraction:
+
+#### Step 1: Cheap Extraction (Performed on All Pages)
+Stored during initial PDF extraction from PDFBox:
+- `textLength` - Length of extracted text
+- `lineCount` - Number of text lines
+- `verseCount` - Number of verses detected
+- `hasFootnoteMarkers` - Boolean flag
+- `hasIllustrationKeywords` - Boolean flag
+- `hasSaphahKeywords` - Boolean flag
+- `containsImages` - Cheap PDFBox image detection (no geometry data stored)
+
+**Cost:** Negligible (text operations only)
+
+#### Step 2: Classification Results
+Determined by analyzer logic based on Step 1 metrics:
+- `needsGeometry` - **Whether PDF geometry extraction is necessary** (default: false)
+- `isBookContent` - Whether page is book content vs glossary/index
+
+**Design Philosophy:** Geometry extraction is expensive (coordinates, layouts, spacing). Only perform it when necessary based on Step 1 analysis.
+
+### When Geometry Is Extracted
+
+Geometry extraction should ONLY occur for pages where `needsGeometry = true`, such as:
+- Pages with complex layouts
+- Pages with images requiring positioning
+- Pages with special formatting (Saphah, tables)
+- Pages where text-only extraction is insufficient
+
+### Database Indexes
+
+Classification results are indexed for efficient querying:
+- `idx_needs_geometry` - Find pages requiring geometry work
+- `idx_is_book_content` - Filter book content vs reference material
 
 ---
 
