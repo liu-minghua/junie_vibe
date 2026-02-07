@@ -6,9 +6,11 @@ import edu.minghualiu.oahspe.entities.PageRangeContentSummary;
 import edu.minghualiu.oahspe.enums.PageCategory;
 import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
 import edu.minghualiu.oahspe.ingestion.runner.PDFExtractionException;
+import edu.minghualiu.oahspe.ingestion.classifier.Phase1Classifier;
 import edu.minghualiu.oahspe.ingestion.runner.PDFTextExtractor;
 import edu.minghualiu.oahspe.ingestion.runner.ProgressCallback;
 import edu.minghualiu.oahspe.ingestion.util.PdfPageUtil;
+import edu.minghualiu.oahspe.records.PageClassificationResult;
 import edu.minghualiu.oahspe.repositories.PageContentRepository;
 import edu.minghualiu.oahspe.repositories.PageImageRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ public class PageLoader {
     private final PageContentRepository pageContentRepository;
     private final PageImageRepository pageImageRepository;
     private final TransactionTemplate transactionTemplate;
+    private final Phase1Classifier phase1Classifier;
 
     private static final int BATCH_SIZE = 100;
 
@@ -198,5 +201,55 @@ public class PageLoader {
                 .errorCount((int) errorCount)
                 .totalImages(totalImages)
                 .build();
+    }
+
+    /**
+     * Classifies pages in the given range using Phase1Classifier.
+     * Updates each PageContent with pageType and needsGeometry flags.
+     *
+     * @param startPageNumber inclusive start page number
+     * @param endPageNumber inclusive end page number
+     * @return count of pages successfully classified
+     */
+    public int classifyPageRange(int startPageNumber, int endPageNumber) {
+        log.info("Starting classification for pages {}-{}", startPageNumber, endPageNumber);
+
+        int classifiedCount = 0;
+
+        for (int pageNum = startPageNumber; pageNum <= endPageNumber; pageNum++) {
+            try {
+                var pageContentOpt = pageContentRepository.findByPageNumber(pageNum);
+
+                if (pageContentOpt.isPresent()) {
+                    PageContent pageContent = pageContentOpt.get();
+
+                    // Classify the page
+                    PageClassificationResult result = phase1Classifier.classify(pageContent);
+
+                    // Update the PageContent with classification results
+                    pageContent.setPageType(result.pageType());
+                    pageContent.setNeedsGeometry(result.needsGeometry());
+
+                    // Save the updated PageContent
+                    pageContentRepository.save(pageContent);
+
+                    classifiedCount++;
+
+                    if (pageNum % 50 == 0) {
+                        log.debug("Classified page {}: {} (needs geometry: {})",
+                                pageNum, result.pageType(), result.needsGeometry());
+                    }
+                } else {
+                    log.warn("PageContent not found for page number {}", pageNum);
+                }
+            } catch (Exception e) {
+                log.error("Failed to classify page {}: {}", pageNum, e.getMessage(), e);
+            }
+        }
+
+        log.info("Classification complete. Pages classified: {}/{}",
+                classifiedCount, (endPageNumber - startPageNumber + 1));
+
+        return classifiedCount;
     }
 }

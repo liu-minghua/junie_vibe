@@ -3,8 +3,10 @@ package edu.minghualiu.oahspe.ingestion.classifier;
 import edu.minghualiu.oahspe.records.PageClassificationResult;
 import edu.minghualiu.oahspe.entities.PageContent;
 import edu.minghualiu.oahspe.enums.PageType;
+import org.springframework.stereotype.Component;
 import java.util.regex.Pattern;
 
+@Component
 public class Phase1Classifier implements PageClassifier {
 
     private static final Pattern VERSE_PATTERN = Pattern.compile("[0-9]{2}/[0-9]{1,2}\\.[0-9]{1,2}"); 

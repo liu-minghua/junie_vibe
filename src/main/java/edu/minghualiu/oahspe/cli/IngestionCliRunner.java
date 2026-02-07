@@ -66,6 +66,10 @@ public class IngestionCliRunner implements CommandLineRunner {
                 runIngestion();
                 break;
 
+            case "--classify-books":
+                classifyOahspeBooks();
+                break;
+
             case "--verify-links":
                 runVerification();
                 break;
@@ -239,6 +243,7 @@ public class IngestionCliRunner implements CommandLineRunner {
         log.info("");
         log.info("  --workflow                 Run complete 3-phase workflow");
         log.info("  --load-pages               Phase 1: Load all pages from PDF");
+        log.info("  --classify-books           Classify all Oahspe Book pages (7-1668)");
         log.info("  --ingest-pages             Phase 3: Ingest loaded pages");
         log.info("  --verify-links             Verify content-page linking");
         log.info("  --cleanup [--confirm]      Phase 2: Delete ingested domain data");
@@ -360,6 +365,43 @@ public class IngestionCliRunner implements CommandLineRunner {
             log.error("=".repeat(80));
             log.error("Error: {}", e.getMessage(), e);
             throw new RuntimeException("Content ingestion failed", e);
+        }
+    }
+
+    private void classifyOahspeBooks() {
+        log.info("=".repeat(80));
+        log.info("CLASSIFICATION: Oahspe Book Pages (7-1668)");
+        log.info("=".repeat(80));
+        log.info("");
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            edu.minghualiu.oahspe.enums.PageCategory bookCategory = edu.minghualiu.oahspe.enums.PageCategory.OAHSPE_BOOKS;
+            int startPage = bookCategory.getStartPage();
+            int endPage = bookCategory.getEndPage();
+
+            log.info("Classifying pages {} to {}", startPage, endPage);
+            log.info("");
+
+            int classifiedCount = pageLoader.classifyPageRange(startPage, endPage);
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            log.info("");
+            log.info("=".repeat(80));
+            log.info("✓ CLASSIFICATION COMPLETE!");
+            log.info("=".repeat(80));
+            log.info("Duration: {} ms ({} seconds)", duration, duration / 1000.0);
+            log.info("Pages Classified: {}/{}", classifiedCount, (endPage - startPage + 1));
+            log.info("=".repeat(80));
+
+        } catch (Exception e) {
+            log.error("=".repeat(80));
+            log.error("✗ CLASSIFICATION FAILED!");
+            log.error("=".repeat(80));
+            log.error("Error: {}", e.getMessage(), e);
+            throw new RuntimeException("Page classification failed", e);
         }
     }
 
