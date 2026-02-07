@@ -1,7 +1,8 @@
 package edu.minghualiu.oahspe.repositories;
 
-import edu.minghualiu.oahspe.entities.PageCategory;
 import edu.minghualiu.oahspe.entities.PageContent;
+import edu.minghualiu.oahspe.enums.PageCategory;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

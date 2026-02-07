@@ -1,6 +1,7 @@
 package edu.minghualiu.oahspe.ingestion.linker;
 
 import edu.minghualiu.oahspe.entities.*;
+import edu.minghualiu.oahspe.enums.PageCategory;
 import edu.minghualiu.oahspe.repositories.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

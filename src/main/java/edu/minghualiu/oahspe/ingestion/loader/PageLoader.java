@@ -1,9 +1,9 @@
 package edu.minghualiu.oahspe.ingestion.loader;
 
-import edu.minghualiu.oahspe.entities.PageCategory;
 import edu.minghualiu.oahspe.entities.PageContent;
 import edu.minghualiu.oahspe.entities.PageImage;
 import edu.minghualiu.oahspe.entities.PageRangeContentSummary;
+import edu.minghualiu.oahspe.enums.PageCategory;
 import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
 import edu.minghualiu.oahspe.ingestion.runner.PDFExtractionException;
 import edu.minghualiu.oahspe.ingestion.runner.PDFTextExtractor;
@@ -19,7 +19,6 @@ import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.cos.COSName;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.imageio.ImageIO;

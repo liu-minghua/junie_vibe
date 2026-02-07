@@ -1,6 +1,7 @@
 package edu.minghualiu.oahspe.ingestion.workflow;
 
 import edu.minghualiu.oahspe.entities.*;
+import edu.minghualiu.oahspe.enums.PageCategory;
 import edu.minghualiu.oahspe.repositories.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,7 @@
 package edu.minghualiu.oahspe.ingestion.linker;
 
 import edu.minghualiu.oahspe.entities.*;
+import edu.minghualiu.oahspe.enums.PageCategory;
 import edu.minghualiu.oahspe.ingestion.OahspeIngestionService;
 import edu.minghualiu.oahspe.ingestion.parser.GlossaryParser;
 import edu.minghualiu.oahspe.ingestion.parser.IndexParser;

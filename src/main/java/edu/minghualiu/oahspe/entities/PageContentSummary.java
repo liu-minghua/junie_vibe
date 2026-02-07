@@ -1,5 +1,6 @@
 package edu.minghualiu.oahspe.entities;
 
+import edu.minghualiu.oahspe.enums.PageCategory;
 import lombok.*;
 
 /**

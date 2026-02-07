@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import edu.minghualiu.oahspe.enums.PageCategory;
+import edu.minghualiu.oahspe.enums.PageType;
+
 import java.time.LocalDateTime;
 
 /**
@@ -37,6 +40,10 @@ public class PageContent {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private PageCategory category;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "page_type", length = 50, nullable = true)
+    private PageType pageType;
 
     @Lob
     @Column(columnDefinition = "TEXT")

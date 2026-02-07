@@ -63,7 +63,7 @@ public class WorkflowOrchestrator {
      * Runs ingestion for a single category ONLY.
      * Useful for testing parsers without reloading pages.
      */
-    public IngestionContext runPhase3Only(edu.minghualiu.oahspe.entities.PageCategory category) {
+    public IngestionContext runPhase3Only(edu.minghualiu.oahspe.enums.PageCategory category) {
         log.info("=== MANUAL TEST: Phase 3 ONLY for {} ===", category);
         IngestionContext ctx = pageIngestionLinker.ingestCategoryPages(category, null);
 
@@ -187,13 +187,13 @@ public class WorkflowOrchestrator {
         workflowStateRepository.save(workflow);
 
         pageIngestionLinker.ingestCategoryPages(
-                edu.minghualiu.oahspe.entities.PageCategory.OAHSPE_BOOKS, callback);
+                edu.minghualiu.oahspe.enums.PageCategory.OAHSPE_BOOKS, callback);
 
         pageIngestionLinker.ingestCategoryPages(
-                edu.minghualiu.oahspe.entities.PageCategory.GLOSSARIES, callback);
+                edu.minghualiu.oahspe.enums.PageCategory.GLOSSARIES, callback);
 
         pageIngestionLinker.ingestCategoryPages(
-                edu.minghualiu.oahspe.entities.PageCategory.INDEX, callback);
+                edu.minghualiu.oahspe.enums.PageCategory.INDEX, callback);
     }
 
     private boolean verifyPageLoading() {

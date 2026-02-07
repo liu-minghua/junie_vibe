@@ -1,4 +1,4 @@
-package edu.minghualiu.oahspe.entities;
+package edu.minghualiu.oahspe.enums;
 
 /**
  * Categorizes pages in the Oahspe PDF by their content type and purpose.

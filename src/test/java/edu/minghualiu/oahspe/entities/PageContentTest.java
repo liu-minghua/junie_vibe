@@ -2,6 +2,8 @@ package edu.minghualiu.oahspe.entities;
 
 import org.junit.jupiter.api.Test;
 
+import edu.minghualiu.oahspe.enums.PageCategory;
+
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
