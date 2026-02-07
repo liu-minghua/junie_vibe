@@ -7,6 +7,7 @@ import edu.minghualiu.oahspe.ingestion.linker.PageIngestionLinker;
 import edu.minghualiu.oahspe.ingestion.loader.PageLoader;
 import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
 import edu.minghualiu.oahspe.ingestion.runner.ProgressCallback;
+import edu.minghualiu.oahspe.ingestion.util.PdfPageUtil;
 import edu.minghualiu.oahspe.repositories.PageContentRepository;
 import edu.minghualiu.oahspe.repositories.WorkflowStateRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,9 +39,9 @@ public class WorkflowOrchestrator {
     /**
      * Loads pages ONLY — no cleanup, no ingestion, no gates.
      */
-    public IngestionContext runPhase1Only(String pdfPath) {
+    public IngestionContext runPhase1Only() {
         log.info("=== MANUAL TEST: Phase 1 ONLY ===");
-        IngestionContext ctx = pageLoader.loadAllPages(pdfPath, null);
+        IngestionContext ctx = pageLoader.loadAllPages(null);
         log.info("Phase 1 finished: {} pages loaded, {} errors",
                 ctx.getTotalPages(), ctx.getTotalErrorsEncountered());
         return ctx;
@@ -49,9 +50,9 @@ public class WorkflowOrchestrator {
     /**
      * Loads pages and prints a summary, but does NOT enforce the 1831-page rule.
      */
-    public IngestionContext runPhase1AndVerify(String pdfPath) {
+    public IngestionContext runPhase1AndVerify() {
         log.info("=== MANUAL TEST: Phase 1 + Summary ===");
-        IngestionContext ctx = pageLoader.loadAllPages(pdfPath, null);
+        IngestionContext ctx = pageLoader.loadAllPages(null);
 
         long count = pageContentRepository.count();
         log.info("Loaded {} pages into PageContent", count);
@@ -77,13 +78,13 @@ public class WorkflowOrchestrator {
      * Runs all phases but SKIPS strict gate checks.
      * Useful for incremental testing.
      */
-    public WorkflowState runFullWorkflowRelaxed(String pdfPath) {
+    public WorkflowState runFullWorkflowRelaxed() {
         log.info("=== MANUAL TEST: Full Workflow (Relaxed Mode) ===");
 
         WorkflowState workflow = initWorkflow();
 
         // Phase 1
-        executePhase1(pdfPath, workflow, null);
+        executePhase1(workflow, null);
 
         // Phase 2 (no gate)
         executePhase2(workflow, null);
@@ -102,14 +103,14 @@ public class WorkflowOrchestrator {
      *  ORIGINAL PRODUCTION WORKFLOW (UNCHANGED)
      * ============================================================ */
 
-    public WorkflowState executeFullWorkflow(String pdfPath, ProgressCallback callback) {
-        log.info("Starting full ingestion workflow for PDF: {}", pdfPath);
+    public WorkflowState executeFullWorkflow(ProgressCallback callback) {
+        log.info("Starting full ingestion workflow for PDF: {}", PdfPageUtil.getPdfPath());
 
         WorkflowState workflow = initWorkflow();
 
         try {
             if (workflow.getCurrentPhase().ordinal() <= WorkflowPhase.PAGE_LOADING.ordinal()) {
-                executePhase1(pdfPath, workflow, callback);
+                executePhase1(workflow, callback);
 
                 if (!verifyPageLoading()) {
                     throw new RuntimeException("Phase 1 verification failed: Not all pages loaded");
@@ -161,12 +162,12 @@ public class WorkflowOrchestrator {
                         .build());
     }
 
-    private void executePhase1(String pdfPath, WorkflowState workflow, ProgressCallback callback) {
+    private void executePhase1(WorkflowState workflow, ProgressCallback callback) {
         log.info("=== Phase 1: Loading pages from PDF ===");
         workflow.updatePhase(WorkflowPhase.PAGE_LOADING);
         workflowStateRepository.save(workflow);
 
-        IngestionContext context = pageLoader.loadAllPages(pdfPath, callback);
+        IngestionContext context = pageLoader.loadAllPages(callback);
 
         if (!context.isSuccessful()) {
             throw new RuntimeException("Phase 1 failed with " + context.getTotalErrorsEncountered() + " errors");

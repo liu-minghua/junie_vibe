@@ -8,6 +8,7 @@ import edu.minghualiu.oahspe.ingestion.loader.PageLoader;
 import edu.minghualiu.oahspe.ingestion.runner.IngestionContext;
 import edu.minghualiu.oahspe.ingestion.runner.OahspeIngestionRunner;
 import edu.minghualiu.oahspe.ingestion.runner.ProgressCallback;
+import edu.minghualiu.oahspe.ingestion.util.PdfPageUtil;
 import edu.minghualiu.oahspe.ingestion.workflow.IngestionDataCleanup;
 import edu.minghualiu.oahspe.ingestion.workflow.WorkflowOrchestrator;
 import lombok.RequiredArgsConstructor;
@@ -42,11 +43,7 @@ public class IngestionCliRunner implements CommandLineRunner {
 
             // Manual test: Phase 1 only
             case "--test-phase1":
-                if (args.length < 2) {
-                    log.error("Missing PDF path. Usage: --test-phase1 <pdf-path>");
-                    return;
-                }
-                runTestPhase1(args[1]);
+                runTestPhase1();
                 break;
 
             // Manual test: cleanup PageContent + PageImage only
@@ -58,19 +55,11 @@ public class IngestionCliRunner implements CommandLineRunner {
                 }
 
             case "--workflow":
-                if (args.length < 2) {
-                    log.error("Missing PDF path. Usage: --workflow <pdf-path>");
-                    return;
-                }
-                runFullWorkflow(args[1]);
+                runFullWorkflow();
                 break;
 
             case "--load-pages":
-                if (args.length < 2) {
-                    log.error("Missing PDF path. Usage: --load-pages <pdf-path>");
-                    return;
-                }
-                runPageLoading(args[1]);
+                runPageLoading();
                 break;
 
             case "--ingest-pages":
@@ -102,13 +91,8 @@ public class IngestionCliRunner implements CommandLineRunner {
                 break;
 
             default:
-                if (command.startsWith("--")) {
-                    log.error("Unknown command: {}", command);
-                    printHelp();
-                } else {
-                    // Legacy mode: assume it's a PDF path
-                    runLegacyIngestion(command);
-                }
+                log.error("Unknown command: {}", command);
+                printHelp();
                 break;
         }
         
@@ -121,17 +105,17 @@ public class IngestionCliRunner implements CommandLineRunner {
     /**
      * Manual Test: Phase 1 only (load pages, no cleanup, no ingestion).
      */
-    private void runTestPhase1(String pdfPath) {
+    private void runTestPhase1() {
         log.info("=".repeat(80));
         log.info("MANUAL TEST: Phase 1 ONLY (Load Pages)");
         log.info("=".repeat(80));
-        log.info("PDF File: {}", pdfPath);
+        log.info("PDF File: {}", PdfPageUtil.getPdfPath());
         log.info("");
 
         long startTime = System.currentTimeMillis();
 
         try {
-            IngestionContext context = workflowOrchestrator.runPhase1Only(pdfPath);
+            IngestionContext context = workflowOrchestrator.runPhase1Only();
 
             long duration = System.currentTimeMillis() - startTime;
 
@@ -250,17 +234,16 @@ public class IngestionCliRunner implements CommandLineRunner {
         log.info("");
         log.info("COMMANDS:");
         log.info("");
-        log.info("  --test-phase1 <pdf>        Manual Test: Phase 1 only (load pages)");
+        log.info("  --test-phase1              Manual Test: Phase 1 only (load pages)");
         log.info("  --cleanup-pages [--confirm] Delete ALL PageContent + PageImage (manual testing only)");
         log.info("");
-        log.info("  --workflow <pdf>           Run complete 3-phase workflow");
-        log.info("  --load-pages <pdf>         Phase 1: Load all pages from PDF");
+        log.info("  --workflow                 Run complete 3-phase workflow");
+        log.info("  --load-pages               Phase 1: Load all pages from PDF");
         log.info("  --ingest-pages             Phase 3: Ingest loaded pages");
         log.info("  --verify-links             Verify content-page linking");
         log.info("  --cleanup [--confirm]      Phase 2: Delete ingested domain data");
         log.info("  --resume <workflow-name>   Resume an interrupted workflow");
         log.info("");
-        log.info("  <pdf>                      Legacy mode: Run old ingestion");
         log.info("  --help, -h                 Show this help message");
         log.info("");
         log.info("=".repeat(80));
@@ -269,20 +252,19 @@ public class IngestionCliRunner implements CommandLineRunner {
 
     // ---------- Existing workflow commands ----------
 
-    private void runFullWorkflow(String pdfPath) {
+    private void runFullWorkflow() {
         log.info("=".repeat(80));
         log.info("PHASE 7 WORKFLOW: Complete 3-Phase Ingestion");
         log.info("=".repeat(80));
-        log.info("PDF File: {}", pdfPath);
+        log.info("PDF File: {}", PdfPageUtil.getPdfPath());
         log.info("");
 
         long startTime = System.currentTimeMillis();
 
         try {
-            WorkflowState workflow = workflowOrchestrator.executeFullWorkflow(
-                    pdfPath,
+                WorkflowState workflow = workflowOrchestrator.executeFullWorkflow(
                     createProgressCallback()
-            );
+                );
 
             long duration = System.currentTimeMillis() - startTime;
 
@@ -304,17 +286,17 @@ public class IngestionCliRunner implements CommandLineRunner {
         }
     }
 
-    private void runPageLoading(String pdfPath) {
+    private void runPageLoading() {
         log.info("=".repeat(80));
         log.info("PHASE 1: Loading Pages from PDF");
         log.info("=".repeat(80));
-        log.info("PDF File: {}", pdfPath);
+        log.info("PDF File: {}", PdfPageUtil.getPdfPath());
         log.info("");
 
         long startTime = System.currentTimeMillis();
 
         try {
-            IngestionContext context = pageLoader.loadAllPages(pdfPath, createProgressCallback());
+            IngestionContext context = pageLoader.loadAllPages(createProgressCallback());
 
             long duration = System.currentTimeMillis() - startTime;
 
