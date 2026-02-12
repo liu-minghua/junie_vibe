@@ -3,7 +3,7 @@
 **Date:** February 2, 2026  
 **Status:** Integration Complete - Ready for Implementation  
 **Audience:** Developers implementing Phase 8  
-**Version:** 1.0
+**Version:** 1.1
 
 ---
 
@@ -24,6 +24,8 @@ The current ingestion workflow based on concatenated `rawText` for each page is 
 - **Column detection** by spatial clustering of x-coordinates
 - **Reading order reconstruction** (left-column top→bottom, right-column top→bottom)
 - **Footnote identification** by y-coordinate (footer area)
+
+**Update:** As an immediate solution for raw text processing, `TwoColumnPDFSplitter` has been integrated into `OahspeIngestionService`. This utility splits raw page text into four logical blocks: Left Verses, Left Footnotes, Right Verses, and Right Footnotes, allowing for correct sequential processing even without full geometry extraction.
 
 ## What Changed in Phase 8 Design
 
@@ -156,6 +158,16 @@ Create tables for TextFragment and PdfImage with proper indexes.
   2. Within each column: sort by y-coordinate
   3. Assign sequential readingOrder (1, 2, 3, ...)
 
+**TwoColumnPDFSplitter.java** (Integrated)
+- **Purpose:** Handles raw text splitting for immediate ingestion needs or fallback.
+- **Logic:**
+  1. Detects footnote section start.
+  2. Splits text into Verses and Footnotes.
+  3. Detects column gutter in footnotes.
+  4. Splits verses based on logical markers or geometry (if available).
+  5. Returns `SplitResult` with `leftVerses`, `leftFootnotes`, `rightVerses`, `rightFootnotes`.
+- **Integration:** Used by `OahspeIngestionService.ingestPage` to process text blocks in correct order: Left V -> Left FN -> Right V -> Right FN.
+
 #### CLI Command
 ```bash
 java -jar oahspe.jar --extract-geometry
@@ -279,6 +291,7 @@ List<Footnote> footnotes = footnoteExtractor.extractFootnotes(fragments);
 - `ChapterDetectionService` (uses font properties)
 - `VerseExtractionService` (uses reading order)
 - `FootnoteExtractionService` (uses y-coordinate detection)
+- `OahspeIngestionService` (now uses `TwoColumnPDFSplitter` for raw text ingestion)
 
 ### CLI
 

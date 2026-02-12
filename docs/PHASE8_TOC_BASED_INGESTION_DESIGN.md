@@ -3,15 +3,17 @@
 **Date:** February 1, 2026  
 **Status:** Design Complete - Ready for Implementation  
 **Audience:** Developers implementing Phase 8  
-**Version:** 1.0
+**Version:** 1.1
 
 ---
 
 ## Executive Summary
 
-**Problem:** Current page-sequential ingestion loses book context, resulting in missing books, truncated verses, and lost notes.
+**Problem:** Current page-sequential ingestion loses book context, resulting in missing books, truncated verses, and lost notes. Additionally, the two-column PDF layout causes verses to be broken across columns and footnotes to be misaligned when using simple text concatenation.
 
-**Solution:** Parse Table of Contents (TOC) to establish book boundaries, then process each complete book as an independent unit with verification gates at each step.
+**Solution:** 
+1. **PDF Foundation Layer (Phase 0.5):** Extract geometry-aware text fragments to handle two-column layout correctly.
+2. **TOC-Driven Workflow:** Parse Table of Contents (TOC) to establish book boundaries, then process each complete book as an independent unit with verification gates at each step.
 
 **Key Benefits:**
 - ✅ Structural awareness (books are units, not pages)
@@ -21,6 +23,7 @@
 - ✅ Easy to test (single-book processing)
 - ✅ Manual checkpoints for validation
 - ✅ Clear error recovery procedures
+- ✅ **Correct handling of two-column layout and footnotes**
 
 **Expected Outcome:**
 - 38 books (39 extracted, Book 35 skipped for separate handling)
@@ -64,7 +67,7 @@ Extract Book Boundaries
     ↓
 For Each Book (Complete Unit):
   ├─ Collect All Pages (startPage → endPage)
-  ├─ Parse Entire Book Content
+  ├─ Parse Entire Book Content (using TextFragments/Geometry)
   ├─ Create Book → Chapters → Verses → Notes
   ├─ Aggregate Statistics
   └─ Verify Correctness
@@ -85,6 +88,7 @@ RESULT: All books complete with verified data
 
 **Layer 3: Intelligent Processing**
 - Parse chapters, verses, notes with complete context
+- Use geometry-aware TextFragments (x, y, font properties)
 - Calculate aggregates (counts, combined text)
 - Verify at each step
 
@@ -136,8 +140,48 @@ WHERE category = 'OAHSPE_BOOKS' AND page_number BETWEEN 7 AND 1668;
 
 **Decision Gate:**
 ```
-PASS: Proceed to Phase 1
+PASS: Proceed to Phase 0.5
 FAIL: Stop, investigate phase 1 page loading
+```
+
+---
+
+### Phase 0.5: PDF Foundation Layer (NEW)
+
+**What It Does:**
+Extracts geometry-aware text fragments from PDF to handle two-column layouts.
+
+**Inputs:**
+- PDF file
+
+**Process:**
+1. Load PDF using PDFBox
+2. For each page:
+   - Extract text with coordinates (x, y, width, height)
+   - Extract font properties (name, size, bold, italic)
+   - Detect column boundaries
+   - Assign reading order
+   - Save TextFragment entities
+3. Save PdfImage entities
+
+**Output:**
+- 1831 PdfPage entities
+- >50,000 TextFragment entities
+- PdfImage entities
+
+**Verification Checks:**
+```
+□ TextFragment count > 50,000
+□ Sample fragments have correct x,y coordinates
+□ Font properties populated
+□ Column detection working
+□ Reading order preserved
+```
+
+**Decision Gate:**
+```
+PASS: Proceed to Phase 1
+FAIL: Check PDF extraction logic
 ```
 
 ---
@@ -171,42 +215,9 @@ Extracted 39 books from Table of Contents (38 to process, 1 to skip):
 --  ----------------------------------------  -----   -----   --------
 01  Tae's Prayer                             7       11      PROCESS
 02  Oahspe Prologue                          11      13      PROCESS
-03  Voice of Man                             14      27      PROCESS
-04  Book of Jehovih                          27      88      PROCESS
-05  Book of Sethantes                        88      115     PROCESS
-06  First Book of the First Lords            115     135     PROCESS
-07  Book of Ah'shong                         135     166     PROCESS
-08  Second Book of Lords                     166     195     PROCESS
-09  Synopsis of Sixteen Cycles               195     225     PROCESS
-10  Book of Aph                              225     250     PROCESS
-11  The Lords' First Book                    250     271     PROCESS
-12  Book of Sue                              271     297     PROCESS
-13  The Lords' Second Book                   297     318     PROCESS
-14  Book of Apollo                           318     346     PROCESS
-15  The Lords' Third Book                    346     367     PROCESS
-16  Book of Thor                             367     395     PROCESS
-17  The Lords' Fourth Book                   395     416     PROCESS
-18  Book of Osiris                           416     444     PROCESS
-19  The Lords' Fifth Book                    444     465     PROCESS
-20  Book of Fragapatti                       465     493     PROCESS
-21  Book of God's Word                       493     542     PROCESS
-22  Book of Divinity                         542     594     PROCESS
-23  Book of Cpenta-armij                     594     640     PROCESS
-24  First Book of God                        640     667     PROCESS
-25  Book of Wars Against Jehovih             667     737     PROCESS
-26  Book of Lika                             737     773     PROCESS
-27  Book of the Arc of Bon                   773     814     PROCESS
-28  God's Book of Eskra                      814     850     PROCESS
-29  Book of Es                               850     890     PROCESS
-30  Bon's Book of Praise                     890     920     PROCESS
-31  Book of Ouranothen                       920     962     PROCESS
-32  Book of Judgment                         962     1001    PROCESS
-33  Book of Discipline                       1001    1047    PROCESS
-34  Book of Inspiration                      1047    1089    PROCESS
+...
 35  Book of Saphah                           [TBD]   [TBD]   SKIP (different structure)
-36  God's Book of Ben                        [pages] [pages] PROCESS
-37  Book of Knowledge                        [pages] [pages] PROCESS
-38  Book of Cosmogony and Prophecy           [pages] [pages] PROCESS
+...
 39  Bk of Jehovih's Kingdom on Earth         1600+   1614    PROCESS
                                                               ------
                                              Total: 38 books (SKIP Saphah)
@@ -2230,7 +2241,7 @@ After completing all phases:
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 1.1
 **Last Updated:** February 1, 2026  
 **Status:** Ready for Implementation (Book 35 Saphah marked for Phase 8.5)  
 **Next Action:** Begin Phase 0 verification and Phase 1 implementation

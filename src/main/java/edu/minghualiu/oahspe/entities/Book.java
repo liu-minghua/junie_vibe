@@ -22,8 +22,13 @@ public class Book {
     private Integer id;
 
     private String title;
+    
+    @Column(columnDefinition = "TEXT")
     private String description;
+    
     private String titleInChinese;
+    
+    @Column(columnDefinition = "TEXT")
     private String descriptionInChinese;
     
     @Column(name = "page_number")

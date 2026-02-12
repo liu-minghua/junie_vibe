@@ -11,7 +11,6 @@ import java.util.List;
 
 @Entity
 @Table(name = "notes",
-    uniqueConstraints = {@UniqueConstraint(columnNames = {"noteKey"})},
     indexes = {
         @Index(name = "idx_note_page", columnList = "page_number")
     })
@@ -26,7 +25,11 @@ public class Note {
     private int id;
 
     private String noteKey;
+    
+    @Column(columnDefinition = "TEXT")
     private String text;
+    
+    @Column(columnDefinition = "TEXT")
     private String textInChinese;
     
     @Column(name = "page_number")

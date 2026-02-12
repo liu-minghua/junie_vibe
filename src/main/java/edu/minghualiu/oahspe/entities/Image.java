@@ -29,10 +29,15 @@ public class Image {
 
     @Column(nullable = false)
     private String title;
+    
     private String titleInChinese;
-    @Column(nullable = false)
+    
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
-    private String descriptionInChines;
+    
+    @Column(columnDefinition = "TEXT")
+    private String descriptionInChinese;
+
     private Integer sourcePage;
     private String originalFilename;
   	

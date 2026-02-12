@@ -2,11 +2,15 @@ package edu.minghualiu.oahspe.ingestion;
 
 import edu.minghualiu.oahspe.entities.*;
 import edu.minghualiu.oahspe.ingestion.parser.OahspeEvent;
+import edu.minghualiu.oahspe.ingestion.parser.OahspeParser;
+import edu.minghualiu.oahspe.ingestion.util.TwoColumnPDFSplitter;
 import edu.minghualiu.oahspe.repositories.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -25,8 +29,7 @@ import java.util.List;
  *
  * <p><b>Typical Usage:</b>
  * <pre>
- * List&lt;OahspeEvent&gt; events = parser.parsePage(pdfText);
- * service.ingestEvents(events, pageNumber);
+ * service.ingestPage(pdfText, pageNumber);
  * service.saveCurrentBook();  // persist after batch
  * service.finishIngestion();  // reset state before next book
  * </pre>
@@ -46,14 +49,59 @@ public class OahspeIngestionService {
     private final NoteRepository noteRepository;
     private final ImageRepository imageRepository;
     private final ImageNoteLinker imageNoteLinker;
-    
+    private final OahspeParser oahspeParser;
+
     private Book currentBook;
     private Chapter currentChapter;
     private Verse currentVerse;
     private Note currentNote;
     private int currentPageNumber;
     private boolean introductionChapterCreated = false;
-    
+
+    /**
+     * Ingests a full page of raw text by splitting it into columns and parsing each part.
+     * This is the new primary entry point for page-level ingestion.
+     *
+     * @param rawPageText The raw text content of a single PDF page.
+     * @param pageNumber The page number.
+     */
+    @Transactional
+    public void ingestPage(String rawPageText, int pageNumber) {
+        log.info("Ingesting page {} using TwoColumnPDFSplitter.", pageNumber);
+        TwoColumnPDFSplitter.SplitResult splitResult = TwoColumnPDFSplitter.split(rawPageText);
+
+        // Process text blocks in a logical reading order: left-to-right, top-to-bottom.
+        log.debug("Processing left verses...");
+        processText(splitResult.leftVerses, pageNumber);
+
+        log.debug("Processing right verses...");
+        processText(splitResult.rightVerses, pageNumber);
+
+        log.debug("Processing left footnotes...");
+        processText(splitResult.leftFootnotes, pageNumber);
+
+        log.debug("Processing right footnotes...");
+        processText(splitResult.rightFootnotes, pageNumber);
+    }
+
+    /**
+     * Helper method to parse a block of text and ingest the resulting events.
+     *
+     * @param text The text block to process.
+     * @param pageNumber The current page number.
+     */
+    private void processText(String text, int pageNumber) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        List<String> lines = Arrays.asList(text.split("\\R"));
+        List<OahspeEvent> events = oahspeParser.parse(lines, pageNumber);
+        if (!events.isEmpty()) {
+            // The first event is always PageBreak, which is fine.
+            ingestEvents(events, pageNumber);
+        }
+    }
+
     /**
      * Ingests a batch of events from the parser and updates entity context.
      *
@@ -79,10 +127,10 @@ public class OahspeIngestionService {
      */
     public void ingestEvents(List<OahspeEvent> events, int pageNumber) {
         this.currentPageNumber = pageNumber;
-        
+
         // Recover state if needed - handles case where previous transaction rolled back
         recoverStateIfNeeded();
-        
+
         for (OahspeEvent event : events) {
             switch (event) {
                 case OahspeEvent.BookStart book -> handleBookStart(book);
@@ -94,11 +142,11 @@ public class OahspeIngestionService {
             }
         }
     }
-    
+
     /**
      * Recover state from database. Always re-fetches entities to handle detachment
      * due to transaction boundaries or rollbacks.
-     * 
+     *
      * This method is called at the start of each page ingestion to ensure we have
      * managed entities in the current persistence context.
      */
@@ -106,12 +154,12 @@ public class OahspeIngestionService {
         // Always try to re-fetch entities to ensure they're managed in current persistence context
         if (currentBook != null && currentBook.getId() != null) {
             Integer bookId = currentBook.getId();
-            Long chapterId = (currentChapter != null && currentChapter.getId() != null) 
+            Long chapterId = (currentChapter != null && currentChapter.getId() != null)
                     ? currentChapter.getId() : null;
-            
+
             // Re-fetch book
             currentBook = bookRepository.findById(bookId).orElse(null);
-            
+
             // Re-fetch chapter if we had one
             if (chapterId != null && currentBook != null) {
                 currentChapter = chapterRepository.findById(chapterId).orElse(null);
@@ -125,13 +173,13 @@ public class OahspeIngestionService {
             } else {
                 currentChapter = null;
             }
-            
-            log.trace("Recovered state: book={}, chapter={}", 
+
+            log.trace("Recovered state: book={}, chapter={}",
                     currentBook != null ? currentBook.getTitle() : "null",
                     currentChapter != null ? currentChapter.getTitle() : "null");
         }
     }
-    
+
     private void handleBookStart(OahspeEvent.BookStart event) {
         currentBook = Book.builder()
                 .title(event.title())
@@ -143,7 +191,7 @@ public class OahspeIngestionService {
         currentNote = null;
         log.debug("Starting book: {} on page {}", event.title(), currentPageNumber);
     }
-    
+
     private void handleChapterStart(OahspeEvent.ChapterStart event) {
         currentChapter = Chapter.builder()
                 .title(event.title())
@@ -154,7 +202,7 @@ public class OahspeIngestionService {
         currentChapter = chapterRepository.save(currentChapter);
         currentVerse = null;
         currentNote = null;
-        log.debug("Created chapter: {} for book: {}", event.title(), 
+        log.debug("Created chapter: {} for book: {}", event.title(),
                 currentBook != null ? currentBook.getTitle() : "null");
     }
     private void handleVerse(OahspeEvent.Verse event) {
@@ -162,7 +210,7 @@ public class OahspeIngestionService {
         if (currentChapter == null && event.verseKey() != null) {
             createIntroductionChapter();
         }
-        
+
         if (event.verseKey() != null) {
             currentVerse = Verse.builder()
                     .verseKey(event.verseKey())
@@ -180,7 +228,7 @@ public class OahspeIngestionService {
             currentVerse = verseRepository.save(currentVerse);
         }
     }
-    
+
     private void handleNote(OahspeEvent.Note event) {
         if (event.noteKey() != null) {
             currentNote = Note.builder()
@@ -198,7 +246,7 @@ public class OahspeIngestionService {
             currentNote = noteRepository.save(currentNote);
         }
     }
-    
+
     private void handleImageRef(OahspeEvent.ImageRef event) {
         Image image = Image.builder()
                 .imageKey(event.imageKey())
@@ -209,12 +257,12 @@ public class OahspeIngestionService {
         Image savedImage = imageRepository.save(image);
         if (currentNote != null) imageNoteLinker.linkImageToNote(currentNote, savedImage);
     }
-    
+
     @Transactional
     public void saveCurrentBook() {
         if (currentBook != null) bookRepository.save(currentBook);
     }
-    
+
     /**
      * Completes the current ingestion session and resets all context state.
      *
@@ -251,21 +299,21 @@ public class OahspeIngestionService {
         currentNote = null;
         introductionChapterCreated = false;
     }
-    
+
     /**
      * Creates an "Introduction" chapter for orphaned content that appears before any formal book/chapter.
-     * 
+     *
      * <p>This handles edge cases where verse content exists in preface/introduction sections
      * before the first BookStart/ChapterStart events. Creates a pseudo-book and chapter to
      * maintain database referential integrity while preserving all content.</p>
-     * 
+     *
      * <p>The introduction book and chapter use descriptive titles to clearly distinguish
      * them from regular content.</p>
      */
     private void createIntroductionChapter() {
         if (!introductionChapterCreated) {
             log.info("Creating introduction chapter for orphaned content before first book/chapter on page {}", currentPageNumber);
-            
+
             // Create or get introduction book
             if (currentBook == null) {
                 currentBook = Book.builder()
@@ -276,7 +324,7 @@ public class OahspeIngestionService {
                 currentBook = bookRepository.save(currentBook);
                 log.debug("Created introduction book on page {}", currentPageNumber);
             }
-            
+
             // Create introduction chapter - don't manipulate collections
             currentChapter = Chapter.builder()
                     .title("Preface")
@@ -285,15 +333,15 @@ public class OahspeIngestionService {
                     .pageNumber(currentPageNumber)
                     .build();
             currentChapter = chapterRepository.save(currentChapter);
-            
+
             introductionChapterCreated = true;
             log.debug("Created introduction chapter for book: {} on page {}", currentBook.getTitle(), currentPageNumber);
         }
     }
-    
+
     /**
      * Returns whether an introduction chapter was auto-created during this ingestion session.
-     * 
+     *
      * @return true if introduction chapter was created for orphaned content
      */
     public boolean isIntroductionChapterCreated() {

@@ -56,6 +56,7 @@ Intelligent book-by-book ingestion using Table of Contents + Geometry-Aware Text
 
 **NEW in Phase 8:** Fixes critical two-column PDF layout issue
 - ✅ Phase 0.5: PDF Foundation Layer (extract TextFragments with geometry)
+- ✅ **Two-Column PDF Splitter Integration** (New utility for handling raw text columns)
 - ⏳ Phase 1-6: TOC-Based Workflow (as documented)
 - **Status:** Design Complete, Integration Complete - Ready for Implementation
 - **Key Files:**
@@ -69,6 +70,8 @@ Intelligent book-by-book ingestion using Table of Contents + Geometry-Aware Text
 - Verses continued across pages
 - Footnotes interleaved at column bottom
 - Perfect reading order reconstruction
+
+**Update:** `TwoColumnPDFSplitter` has been integrated into `OahspeIngestionService` to handle raw text splitting for pages where geometry extraction is not used or as a fallback. It splits text into Left Verses, Left Footnotes, Right Verses, and Right Footnotes, processing them in logical reading order.
 
 ## 🚀 Getting Started
 

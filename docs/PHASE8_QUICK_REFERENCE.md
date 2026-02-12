@@ -22,6 +22,8 @@ Solution:
   - Result: Perfect verse/footnote extraction despite complex layout
 ```
 
+**Update:** `TwoColumnPDFSplitter` has been integrated into `OahspeIngestionService` to handle raw text splitting for pages where geometry extraction is not used or as a fallback. It splits text into Left Verses, Left Footnotes, Right Verses, and Right Footnotes, processing them in logical reading order.
+
 ---
 
 ## The 8 Phases at a Glance
@@ -88,6 +90,7 @@ java -jar target/oahspe-0.0.1-SNAPSHOT.jar --verify
 - **PdfGeometryExtractor** - Extract TextFragments with coordinates
 - **ColumnDetectionService** - Identify left/right column boundaries
 - **ReadingOrderCalculator** - Assign sequential reading order
+- **TwoColumnPDFSplitter** - (Integrated) Splits raw text into logical blocks
 
 ### Essential (Must Have)
 1. **TableOfContentsParser** - Extract books from page 4 (determines N)
@@ -380,6 +383,6 @@ For complete details, specifications, and SQL queries:
 
 ---
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Created:** February 1, 2026  
-**Status:** Ready for Implementation
+**Status:** In Progress

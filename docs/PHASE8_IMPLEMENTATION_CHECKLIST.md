@@ -2,7 +2,7 @@
 
 **Project:** Oahspe PDF Ingestion - Phase 8: TOC-Based Workflow  
 **Start Date:** February 1, 2026  
-**Status:** Not Started  
+**Status:** In Progress  
 **Owner:** (Assign Developer)
 
 ---
@@ -85,6 +85,11 @@
   - [ ] For each column: sort fragments by y-coordinate
   - [ ] Assign sequential reading order
   - [ ] Assign column numbers (0=left, 1=right)
+
+- [x] **Integrate `TwoColumnPDFSplitter.java`** (Completed)
+  - [x] Integrated into `OahspeIngestionService`
+  - [x] Handles raw text splitting (Left Verses, Left Footnotes, Right Verses, Right Footnotes)
+  - [x] Provides immediate fallback for raw text processing
 
 - [ ] Add `--extract-geometry` command to IngestionCliRunner
   - [ ] Loads PDF file from configured location
@@ -628,6 +633,6 @@ For each book:
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Created:** February 1, 2026  
-**Status:** Ready for Implementation
+**Status:** In Progress
